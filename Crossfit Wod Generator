@@ -1,0 +1,563 @@
+import { useState, useCallback, useEffect } from "react";
+
+// ─────────────────────────────────────────────────────
+// 동작 데이터
+// ─────────────────────────────────────────────────────
+const MOVEMENTS = {
+  squat:     {label:"스쿼트",     levels:["Overhead Squat","Front Squat","Back Squat","Air Squat"],               muscles:["대퇴사두","둔근","햄스트링"],  weights:{M:[95,75,95,null],      F:[65,55,65,null]}},
+  press:     {label:"프레스",     levels:["Push Jerk","Push Press","Shoulder Press"],                             muscles:["어깨","삼두"],                 weights:{M:[135,95,75],          F:[95,65,55]}},
+  deadlift:  {label:"데드리프트", levels:["Deadlift","Sumo Deadlift High Pull","Medicine-Ball Clean"],            muscles:["햄스트링","둔근","허리"],      weights:{M:[225,75,20],          F:[155,55,14]}},
+  situp:     {label:"싯업",       levels:["GHD Sit-up","AB Mat Sit-up"],                                         muscles:["복근","고관절굴근"],           weights:{M:[null,null],          F:[null,null]}},
+  pushup:    {label:"푸시업",     levels:["Ring Dip","Push-up","Knee Push-up"],                                   muscles:["가슴","어깨","삼두"],          weights:{M:[null,null,null],     F:[null,null,null]}},
+  boxjump:   {label:"박스점프",   levels:['Burpee Box Jump Over (48/40")','Burpee Box Jump (24/20")','Box Jump','Box Step-up'], muscles:["대퇴사두","둔근","종아리"], weights:{M:[null,null,null,null],F:[null,null,null,null]}},
+  burpee:    {label:"버피",       levels:["Bar Touch Burpee","Burpee"],                                           muscles:["전신","어깨","가슴"],          weights:{M:[null,null],          F:[null,null]}},
+  handstand: {label:"핸드스탠드", levels:["Handstand Walk","Handstand Push-up","Pike Push-up"],                   muscles:["어깨","삼두"],                 weights:{M:[null,null,null],     F:[null,null,null]}},
+  gymnastic: {label:"체조",       levels:["Ring Muscle-up","Bar Muscle-up","Chest to Bar","Pull-up","Ring Row"],  muscles:["광배근","이두"],               weights:{M:[null,null,null,null,null],F:[null,null,null,null,null]}},
+  t2b:       {label:"T2B",        levels:["Toes to Bar","Knees to Elbow","Hanging Knee Raise"],                   muscles:["복근","광배근","고관절굴근"],   weights:{M:[null,null,null],     F:[null,null,null]}},
+  clean:     {label:"클린",       levels:["Clean & Jerk","Squat Clean","Power Clean","Hang Power Clean"],         muscles:["전신","대퇴사두","승모근"],     weights:{M:[185,155,135,115],    F:[125,105,95,75]}},
+  lunge:     {label:"런지",       levels:["Overhead Walking Lunge","DB Front-rack Lunge","Lunge"],                muscles:["대퇴사두","둔근","햄스트링"],   weights:{M:[45,50,null],         F:[25,35,null]}},
+  snatch:    {label:"스내치",     levels:["Squat Snatch","Power Snatch","Hang Power Snatch"],                     muscles:["전신","어깨","승모근"],         weights:{M:[135,115,95],         F:[95,75,65]}},
+  thruster:  {label:"스러스터",   levels:["Thruster","DB Thruster"],                                              muscles:["대퇴사두","어깨","둔근"],       weights:{M:[95,50],              F:[65,35]}},
+  wallball:  {label:"월볼",       levels:["Wall Ball (20/14 lb)","Wall Ball (14/10 lb)"],                         muscles:["대퇴사두","어깨","둔근"],       weights:{M:[20,14],              F:[14,10]}},
+  kettlebell:{label:"케틀벨",     levels:["AKBS (American KB Swing)","RKBS (Russian KB Swing)"],                  muscles:["둔근","햄스트링","어깨"],       weights:{M:[53,53],              F:[35,35]}},
+  ropeclimb: {label:"로프클라임", levels:["Rope Climb (15 ft)","Rope Climb (10 ft)","Rope Pull (lying)"],         muscles:["광배근","이두","코어"],         weights:{M:[null,null,null],     F:[null,null,null]}},
+  run:       {label:"달리기",     levels:["Run 400m","Run 200m","Run 100m"],                                      muscles:["종아리","햄스트링","전신"],     weights:{M:[null,null,null],     F:[null,null,null]}},
+  row:       {label:"로잉",       levels:["Rowing 500m","Rowing 250m"],                                           muscles:["광배근","햄스트링","전신"],     weights:{M:[null,null],          F:[null,null]}},
+  bike:      {label:"바이크",     levels:["Bike 1000m","Bike 500m"],                                              muscles:["대퇴사두","종아리","전신"],     weights:{M:[null,null],          F:[null,null]}},
+};
+
+// ─────────────────────────────────────────────────────
+// 네임드 와드 데이터 — 초압축 포맷
+// [name, cat, type, rounds, time, tribute, desc, [[mvName, muscles[], reps, wM, wF],...], note]
+// ─────────────────────────────────────────────────────
+const RAW_WODS = [
+// ══ GIRLS (27개) ═══════════════════════════════════
+["Amanda","Girls","For Time","9-7-5",null,"크로스핏 대표 벤치마크","9-7-5 For Time\nSquat Snatches (135/95 lb)\nRing Muscle-ups",[["Squat Snatch",["전신","어깨","승모근"],9,135,95],["Ring Muscle-up",["광배근","이두","가슴"],9,null,null]],"최고난도. 스내치+링머슬업. 목표 8~15분."],
+["Angie","Girls","For Time",null,null,"크로스핏 최초 벤치마크 (2003)","For Time\n100 Pull-ups\n100 Push-ups\n100 Sit-ups\n100 Air Squats\n(각 동작 완료 후 다음으로)",[["Pull-up",["광배근","이두"],100,null,null],["Push-up",["가슴","어깨","삼두"],100,null,null],["Sit-up",["복근","고관절굴근"],100,null,null],["Air Squat",["대퇴사두","둔근"],100,null,null]],"총 400회 바디웨이트. 목표 15~25분."],
+["Annie","Girls","For Time","50-40-30-20-10",null,"크로스핏 대표 벤치마크","50-40-30-20-10 For Time\nDouble Unders\nSit-ups",[["Double Under",["종아리","전신"],50,null,null],["AB Mat Sit-up",["복근","고관절굴근"],50,null,null]],"줄넘기+싯업 점감. 총 150+150회. 목표 10분 이내."],
+["Barbara","Girls","For Time",5,null,"크로스핏 최초 벤치마크 (2003)","5 Rounds For Time\n20 Pull-ups\n30 Push-ups\n40 Sit-ups\n50 Air Squats\n(3분 휴식 포함)",[["Pull-up",["광배근","이두"],20,null,null],["Push-up",["가슴","어깨","삼두"],30,null,null],["Sit-up",["복근","고관절굴근"],40,null,null],["Air Squat",["대퇴사두","둔근"],50,null,null]],"라운드 사이 3분 휴식. 총 700회. 목표 20~30분(휴식 제외)."],
+["Badger","Girls","For Time",3,null,"크로스핏 대표 벤치마크","3 Rounds For Time\n30 Squat Cleans (95/65 lb)\n30 Pull-ups\n800m Run",[["Squat Clean",["전신","대퇴사두","승모근"],30,95,65],["Pull-up",["광배근","이두"],30,null,null],["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"총 90 클린+90 풀업+2.4km 달리기. 40~60분 소요."],
+["Chelsea","Girls","EMOM",null,30,"크로스핏 최초 벤치마크 (2003)","EMOM 30 Minutes\n5 Pull-ups\n10 Push-ups\n15 Air Squats",[["Pull-up",["광배근","이두"],5,null,null],["Push-up",["가슴","어깨","삼두"],10,null,null],["Air Squat",["대퇴사두","둔근"],15,null,null]],"30분 EMOM. Cindy와 동일 동작이지만 시간 강제."],
+["Cindy","Girls","AMRAP",null,20,"크로스핏 대표 벤치마크","20 min AMRAP\n5 Pull-ups\n10 Push-ups\n15 Air Squats",[["Pull-up",["광배근","이두"],5,null,null],["Push-up",["가슴","어깨","삼두"],10,null,null],["Air Squat",["대퇴사두","둔근"],15,null,null]],"Good: 남 20R+, 여 15R+."],
+["Diane","Girls","For Time","21-15-9",null,"크로스핏 대표 벤치마크","21-15-9 For Time\nDeadlifts (225/155 lb)\nHandstand Push-ups",[["Deadlift",["햄스트링","둔근","허리"],21,225,155],["Handstand Push-up",["어깨","삼두"],21,null,null]],"데드리프트+HSPU. 목표 5~8분."],
+["Elizabeth","Girls","For Time","21-15-9",null,"크로스핏 대표 벤치마크 (2003)","21-15-9 For Time\nSquat Cleans (135/95 lb)\nRing Dips",[["Squat Clean",["전신","대퇴사두","승모근"],21,135,95],["Ring Dip",["가슴","어깨","삼두"],21,null,null]],"클린+링딥. 목표 7~12분."],
+["Eva","Girls","For Time",5,null,"크로스핏 대표 벤치마크","5 Rounds For Time\n800m Run\n30 KB Swings (70/53 lb)\n30 Pull-ups",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],30,70,53],["Pull-up",["광배근","이두"],30,null,null]],"총 4km 달리기+150 KB+150 풀업. 60~90분 소요."],
+["Fran","Girls","For Time","21-15-9",null,"크로스핏 대표 벤치마크","21-15-9 For Time\nThrusters (95/65 lb)\nPull-ups",[["Thruster",["대퇴사두","어깨","둔근"],21,95,65],["Pull-up",["광배근","이두"],21,null,null]],"크로스핏 대표 벤치마크. 엘리트 2분대, 일반 5~10분."],
+["Grace","Girls","For Time",null,null,"크로스핏 대표 벤치마크","For Time\n30 Clean & Jerks (135/95 lb)",[["Clean & Jerk",["전신","어깨","대퇴사두"],30,135,95]],"단일 올림픽 리프팅 30회. 엘리트 1~2분대."],
+["Gwen","Girls","For Load",null,null,"크로스핏 대표 벤치마크","For Load (15-10-5 Touch-and-Go)\nClean & Jerks\n(최대 중량 도전, 내려놓지 않고 연속)",[["Clean & Jerk",["전신","어깨","대퇴사두"],15,135,95]],"15-10-5 터치앤고 클린앤저크. 각 세트 최대 중량으로 진행."],
+["Helen","Girls","For Time",3,null,"크로스핏 대표 벤치마크","3 Rounds For Time\n400m Run\n21 KB Swings (53/35 lb)\n12 Pull-ups",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],21,53,35],["Pull-up",["광배근","이두"],12,null,null]],"달리기→KB→풀업 교차. 목표 9~12분."],
+["Isabel","Girls","For Time",null,null,"크로스핏 대표 벤치마크","For Time\n30 Snatches (135/95 lb)",[["Power Snatch",["전신","어깨","승모근"],30,135,95]],"Grace의 스내치 버전. 목표 2~5분."],
+["Jackie","Girls","For Time",null,null,"크로스핏 대표 벤치마크","For Time\n1000m Row\n50 Thrusters (45/35 lb)\n30 Pull-ups",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Thruster",["대퇴사두","어깨","둔근"],50,45,35],["Pull-up",["광배근","이두"],30,null,null]],"로잉→스러스터→풀업. 목표 10~15분."],
+["Karen","Girls","For Time",null,null,"크로스핏 대표 벤치마크","For Time\n150 Wall Ball Shots (20/14 lb)",[["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],150,20,14]],"단일 월볼 150회. 목표 8~15분."],
+["Kelly","Girls","For Time",5,null,"크로스핏 대표 벤치마크","5 Rounds For Time\n400m Run\n30 Box Jumps (24/20 in)\n30 Wall Ball Shots (20/14 lb)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Box Jump",["대퇴사두","둔근","종아리"],30,null,null],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],30,20,14]],"하체 지구력 극한. 목표 35~50분."],
+["Linda","Girls","For Time","10-9-8-7-6-5-4-3-2-1",null,"크로스핏 '3 Bars of Death'","10-9-8-7-6-5-4-3-2-1 For Time\nDeadlifts (1.5×BW / ~225/155 lb)\nBench Press (BW / ~175/115 lb)\nCleans (0.75×BW / ~135/95 lb)",[["Deadlift",["햄스트링","둔근","허리"],10,225,155],["Bench Press",["가슴","어깨","삼두"],10,175,115],["Power Clean",["전신","대퇴사두","승모근"],10,135,95]],"체중 기준 3바벨. 총 165회. 목표 20~30분."],
+["Lynne","Girls","For Load",5,null,"크로스핏 대표 벤치마크","5 Rounds Max Reps\nBench Press (body weight)\nPull-ups\n(휴식 없이 연속, 최대 랩 기록)",[["Bench Press",["가슴","어깨","삼두"],null,null,null],["Pull-up",["광배근","이두"],null,null,null]],"5라운드 최대랩. 벤치프레스+풀업 총합이 점수."],
+["Mary","Girls","AMRAP",null,20,"크로스핏 대표 벤치마크","20 min AMRAP\n5 Handstand Push-ups\n10 Pistol Squats (alternating)\n15 Pull-ups",[["Handstand Push-up",["어깨","삼두"],5,null,null],["Pistol Squat",["대퇴사두","둔근","코어"],10,null,null],["Pull-up",["광배근","이두"],15,null,null]],"고난도 체조 AMRAP. Good: 10R+."],
+["Nancy","Girls","For Time",5,null,"크로스핏 대표 벤치마크","5 Rounds For Time\n400m Run\n15 Overhead Squats (95/65 lb)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Overhead Squat",["대퇴사두","어깨","코어"],15,95,65]],"심폐 소진 후 OHS 기술. 목표 15~20분."],
+["Nicole","Girls","AMRAP",null,20,"크로스핏 대표 벤치마크","20 min AMRAP\n400m Run\nMax Pull-ups\n(풀업 실패시 다시 달리기)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Pull-up",["광배근","이두"],null,null,null]],"달리기 후 풀업 최대랩. 총 달리기 횟수 × 풀업 합계가 점수."],
+["Nasty Girls","Girls","For Time",3,null,"크로스핏 대표 벤치마크","3 Rounds For Time\n50 Air Squats\n7 Ring Muscle-ups\n10 Hang Power Cleans (135/95 lb)",[["Air Squat",["대퇴사두","둔근"],50,null,null],["Ring Muscle-up",["광배근","이두","가슴"],7,null,null],["Hang Power Clean",["전신","승모근"],10,135,95]],"스쿼트+머슬업+클린 3라운드. 목표 15~25분."],
+["Ingrid","Girls","For Time",3,null,"크로스핏 대표 벤치마크","3 Rounds For Time\n30 KB Swings (53/35 lb)\n20 OHS (45/35 lb PVC)\n10 L-Pull-ups",[["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],30,53,35],["Overhead Squat",["대퇴사두","어깨","코어"],20,45,35],["Pull-up",["광배근","이두"],10,null,null]],"KB+OHS+L풀업 3라운드. 코어 안정성 집중."],
+["Kalsu","Girls","For Time",null,null,"크로스핏 대표 벤치마크 (영웅 와드 경계)","For Time\n100 Thrusters (135/95 lb)\nEvery minute (on the minute), perform 5 Burpees",[["Thruster",["대퇴사두","어깨","둔근"],100,135,95],["Burpee",["전신","가슴"],5,null,null]],"매 분 시작마다 버피 5개. 나머지 시간에 스러스터. 역대 최악 와드 중 하나."],
+["Wittman","Girls","For Time",7,null,"크로스핏 대표 벤치마크","7 Rounds For Time\n15 KB Swings (53/35 lb)\n15 Power Cleans (95/65 lb)\n15 Box Jumps (24/20 in)",[["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],15,53,35],["Power Clean",["전신","대퇴사두","승모근"],15,95,65],["Box Jump",["대퇴사두","둔근","종아리"],15,null,null]],"3종 × 7라운드. 총 315회. 목표 30~45분."],
+
+// ══ HERO (48개) ════════════════════════════════════
+["Arnie","Hero","For Time",null,null,"Cpl. Jesse A. Ainsworth 추모","For Time\n21 Turkish Get-ups (1.5 pood)\n50 KB Swings (1.5 pood)\n21 OHS (95 lb)\n50 Pull-ups\n21 Thruster (95 lb)\n50 Sit-ups\n21 Ring Dips",[["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],50,53,35],["Overhead Squat",["대퇴사두","어깨","코어"],21,95,65],["Pull-up",["광배근","이두"],50,null,null],["Thruster",["대퇴사두","어깨","둔근"],21,95,65],["AB Mat Sit-up",["복근","고관절굴근"],50,null,null],["Ring Dip",["가슴","어깨","삼두"],21,null,null]],"다종목 Hero WOD. 60분+ 소요."],
+["Badger","Hero","For Time",3,null,"Chief Petty Officer Mark Carter 추모 (2009, 이라크)","3 Rounds For Time\n30 Squat Cleans (95/65 lb)\n30 Pull-ups\n800m Run",[["Squat Clean",["전신","대홴사두","승모근"],30,95,65],["Pull-up",["광배근","이두"],30,null,null],["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"총 90 클린+90 풀업+2.4km 달리기. 40~60분."],
+["Boat","Hero","For Time",null,null,"Chief Warrant Officer 2 Brian J. Luce 추모","For Time\n1000m Row\n50 HSPU\n1000m Row\n50 HSPU",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Handstand Push-up",["어깨","삼두"],50,null,null]],"로잉+HSPU 2세트. 어깨 극한 테스트."],
+["Bull","Hero","For Time",3,null,"Sgt. James D. Bull 추모 (2006, 이라크)","3 Rounds For Time\n20 Box Jumps (24/20 in)\n20 KB Swings (53/35 lb)\n20 Pull-ups",[["Box Jump",["대퇴사두","둔근","종아리"],20,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],20,53,35],["Pull-up",["광배근","이두"],20,null,null]],"박스점프+KB+풀업 3라운드. 목표 15~22분."],
+["Caesar","Hero","For Time",null,null,"Sgt. 1st Class Ramon E. Caesar Jr. 추모 (2008, 아프가니스탄)","For Time\n6 Rounds:\n225 lb DL × 6\n135 lb HPC × 7\n95 lb Thruster × 8\n10 Toes-to-Bars",[["Deadlift",["햄스트링","둔근","허리"],6,225,155],["Hang Power Clean",["전신","승모근"],7,135,95],["Thruster",["대퇴사두","어깨","둔근"],8,95,65],["Toes to Bar",["복근","광배근","고관절굴근"],10,null,null]],"4종 동작 6라운드 바벨 집중 Hero WOD."],
+["Chad","Hero","For Load",null,null,"Navy SEAL Chad Wilkinson 추모","For Time\n1,000 Box Step-ups (45 lb ruck, 20 in box)",[["Box Step-up",["대퇴사두","둔근","햄스트링"],1000,null,null]],"1,000회 스텝업. 45lb 배낭. 역대 가장 긴 Hero WOD. 4~8시간 소요."],
+["Danny","Hero","AMRAP",null,20,"Sgt. Daniel J. Crabtree 추모 (2006, 이라크)","20 min AMRAP\n30 Box Jumps (24/20 in)\n20 Push Press (115/75 lb)\n10 Pull-ups",[["Box Jump",["대퇴사두","둔근","종아리"],30,null,null],["Push Press",["어깨","삼두"],20,115,75],["Pull-up",["광배근","이두"],10,null,null]],"3종 AMRAP. Good: 8라운드+."],
+["DT","Hero","For Time",5,null,"USAF Staff Sgt. Timothy P. Davis 추모 (2009, 아프가니스탄)","5 Rounds For Time\n12 Deadlifts (155/105 lb)\n9 Hang Power Cleans (155/105 lb)\n6 Push Jerks (155/105 lb)",[["Deadlift",["햄스트링","둔근","허리"],12,155,105],["Hang Power Clean",["전신","승모근"],9,155,105],["Push Jerk",["어깨","삼두"],6,155,105]],"바벨 내려놓지 않는 콤플렉스. 그립 지구력 테스트."],
+["Glen","Hero","For Time",null,null,"Army Staff Sgt. Glenn Watkins 추모","For Time\n30 Clean & Jerks (205/145 lb)\n1 mile run\n10 Rope Climbs (15 ft)\n1 mile run\n30 Clean & Jerks",[["Clean & Jerk",["전신","어깨","대퇴사두"],30,205,145],["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Rope Climb (15 ft)",["광배근","이두","코어"],10,null,null]],"초고중량 클린앤저크+달리기+로프클라임. 극한 난이도."],
+["Griff","Hero","For Time",null,null,"Sgt. Joshua P. Haifley 추모 (2009, 이라크)","For Time\n800m Run\n400m Run (backward)\n800m Run\n400m Run (backward)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"전진+후진 달리기 반복. 총 2.4km. 밸런스·협응 테스트."],
+["Hansen","Hero","For Time",5,null,"Chief Petty Officer Stephen Bass 추모","5 Rounds For Time\n30 KB Swings (53/35 lb, 2 pood)\n30 Burpees\n30 GHD Sit-ups",[["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],30,53,35],["Burpee",["전신","가슴"],30,null,null],["GHD Sit-up",["복근","고관절굴근"],30,null,null]],"총 450회. 코어+전신 지구력 극한. 50~70분 소요."],
+["Hollywood","Hero","For Time",6,null,"Lt. Col. Marc Stratton 추모 (2008, 이라크)","6 Rounds For Time\n25 Air Squats\n7 Ring Dips\n35 Sit-ups",[["Air Squat",["대퇴사두","둔근"],25,null,null],["Ring Dip",["가슴","어깨","삼두"],7,null,null],["AB Mat Sit-up",["복근","고관절굴근"],35,null,null]],"총 150 스쿼트+42 링딥+210 싯업. 목표 25~35분."],
+["Jack","Hero","AMRAP",null,20,"Staff Sgt. Jack Martin III 추모 (2009, 아프가니스탄)","20 min AMRAP\n10 Push Press (115/85 lb)\n10 KB Swings (53/35 lb)\n10 Box Jumps (24/20 in)",[["Push Press",["어깨","삼두"],10,115,85],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],10,53,35],["Box Jump",["대퇴사두","둔근","종아리"],10,null,null]],"접근하기 쉬운 Hero WOD. Good: 20R+."],
+["JT","Hero","For Time",null,null,"Petty Officer 1st Class Jeff Taylor 추모 (2006, 아프가니스탄)","For Time\n21-15-9\nHandstand Push-ups\nRing Dips\nPush-ups",[["Handstand Push-up",["어깨","삼두"],21,null,null],["Ring Dip",["가슴","어깨","삼두"],21,null,null],["Push-up",["가슴","어깨","삼두"],21,null,null]],"21-15-9 상체 밀기 3종. 어깨+삼두 극한. 목표 15~25분."],
+["Josh","Hero","For Time",null,null,"Staff Sgt. Joshua Hager 추모 (2007, 이라크)","For Time\n21 OHS (95/65 lb)\n42 Pull-ups\n15 OHS (95/65 lb)\n30 Pull-ups\n9 OHS (95/65 lb)\n18 Pull-ups",[["Overhead Squat",["대퇴사두","어깨","코어"],21,95,65],["Pull-up",["광배근","이두"],42,null,null]],"OHS+풀업 21-42/15-30/9-18 구조. 어깨 안정성 극한."],
+["Kalsu","Hero","For Time",null,null,"1st Lt. Robert James Kalsu 추모 (1970, 베트남)","For Time\n100 Thrusters (135/95 lb)\n+ Every minute: 5 Burpees",[["Thruster",["대퇴사두","어깨","둔근"],100,135,95],["Burpee",["전신","가슴"],5,null,null]],"매 분 버피 5개 강제. 역대 최악의 와드 중 하나. 60분+ 소요."],
+["Keeler","Hero","For Time",null,null,"SSgt. Michael J. Kelley 추모","For Time\n5 Rounds:\n20 Pull-ups\n20 KB Swings (1.5 pood)\n20 Box Jumps (24 in)\n20 Double Unders",[["Pull-up",["광배근","이두"],20,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],20,53,35],["Box Jump",["대퇴사두","둔근","종아리"],20,null,null],["Double Under",["종아리","전신"],20,null,null]],"4종 × 5라운드. 목표 25~40분."],
+["Klepto","Hero","For Time",null,null,"Petty Officer 2nd Class David Robert Toshimitsu 추모","5 Rounds For Time\n10 Pull-ups\n15 KB Swings (1.5 pood)\n20 Box Jumps (24 in)",[["Pull-up",["광배근","이두"],10,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],15,53,35],["Box Jump",["대퇴사두","둔근","종아리"],20,null,null]],"3종 5라운드. 목표 18~28분."],
+["Luce","Hero","AMRAP",null,20,"Chief Warrant Officer 2 Brian J. Luce 추모 (2009, 아프가니스탄)","20 min AMRAP\n6 Burpees\n10 Thrusters (45/35 lb)\n24 Double Unders",[["Burpee",["전신","가슴"],6,null,null],["Thruster",["대퇴사두","어깨","둔근"],10,45,35],["Double Under",["종아리","전신"],24,null,null]],"3종 20분 AMRAP. 접근하기 쉬운 Hero WOD."],
+["Loredo","Hero","For Time",6,null,"Staff Sgt. Edwardo Loredo 추모 (2010, 아프가니스탄)","6 Rounds For Time\n24 Air Squats\n24 Push-ups\n24 Walking Lunges\n400m Run",[["Air Squat",["대퇴사두","둔근"],24,null,null],["Push-up",["가슴","어깨","삼두"],24,null,null],["Walking Lunge",["대퇴사두","둔근","햄스트링"],24,null,null],["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"총 432회 바디웨이트+2.4km 달리기. 목표 25~40분."],
+["Lumberjack 20","Hero","For Time",null,null,"포트후드 테러 희생 크로스피터 4인 추모 (2009)","For Time\n20 DL (275/185)\n400m Run\n20 KBS (70/53)\n400m Run\n20 OHS (115/80)\n400m Run\n20 Burpees\n400m Run\n20 C2B\n400m Run\n20 Box Jumps\n400m Run\n20 DB Squat Cleans\n400m Run",[["Deadlift",["햄스트링","둔근","허리"],20,275,185],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],20,70,53],["Overhead Squat",["대퇴사두","어깨","코어"],20,115,80],["Burpee",["전신","가슴"],20,null,null],["Chest to Bar",["광배근","이두"],20,null,null],["Box Jump",["대퇴사두","둔근","종아리"],20,null,null]],"7종 × 20회 + 각 400m 달리기. 40~60분 소요."],
+["Manion","Hero","For Time",7,null,"1st Lt. Travis Manion 추모 (2007, 이라크)","7 Rounds For Time\n400m Run\n29 Back Squats (135/95 lb)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Back Squat",["대퇴사두","둔근","햄스트링"],29,135,95]],"7라운드=7월, 29=29세. 총 203 스쿼트+2.8km 달리기."],
+["McGhee","Hero","AMRAP",null,30,"Cpl. Ryan C. McGhee 추모 (2009, 이라크)","30 min AMRAP\n5 Deadlifts (275/185 lb)\n13 Push-ups\n9 Box Jumps (24/20 in)",[["Deadlift",["햄스트링","둔근","허리"],5,275,185],["Push-up",["가슴","어깨","삼두"],13,null,null],["Box Jump",["대퇴사두","둔근","종아리"],9,null,null]],"30분 AMRAP. 중량 DL 관건. Good: 12R+."],
+["Michael","Hero","For Time",3,null,"Navy Lt. Michael McGreevy 추모 (2005, 아프가니스탄)","3 Rounds For Time\n800m Run\n50 Back Extensions\n50 Sit-ups",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Back Extension",["허리","둔근","햄스트링"],50,null,null],["AB Mat Sit-up",["복근","고관절굴근"],50,null,null]],"달리기+백익스텐션+싯업. 코어 전·후면 균형."],
+["Millan","Hero","For Time",4,null,"Sgt. Jason D. Millan 추모 (2007, 이라크)","4 Rounds For Time\n20 Thrusters (45/35 lb)\n20 Pull-ups\n20 KB Swings (35/26 lb)\n20 Sit-ups\n400m Run",[["Thruster",["대퇴사두","어깨","둔근"],20,45,35],["Pull-up",["광배근","이두"],20,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],20,35,26],["AB Mat Sit-up",["복근","고관절굴근"],20,null,null],["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"5종 4라운드. 목표 30~45분."],
+["Mr. Joshua","Hero","For Time",5,null,"SO1 Joshua Thomas Harris 추모 (2008, 아프가니스탄)","5 Rounds For Time\n400m Run\n30 GHD Sit-ups\n15 Deadlifts (250/175 lb)",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["GHD Sit-up",["복근","고관절굴근"],30,null,null],["Deadlift",["햄스트링","둔근","허리"],15,250,175]],"달리기+GHD+DL. 후면사슬·코어·심폐 고볼륨."],
+["Murph","Hero","For Time",null,null,"Lt. Michael P. Murphy 추모 (2005, 아프가니스탄)","For Time (20/14 lb Vest)\n1 Mile Run\n100 Pull-ups\n200 Push-ups\n300 Air Squats\n1 Mile Run",[["Run (1 mile)",["전신","종아리"],null,null,null],["Pull-up",["광배근","이두"],100,null,null],["Push-up",["가슴","어깨","삼두"],200,null,null],["Air Squat",["대퇴사두","둔근"],300,null,null],["Run (1 mile)",["전신","종아리"],null,null,null]],"Navy SEAL Murphy의 'Body Armor' WOD. 600 바디웨이트+2마일."],
+["Nate","Hero","AMRAP",null,20,"Navy SEAL Chief Nate Hardy 추모 (2008, 이라크)","20 min AMRAP\n2 Ring Muscle-ups\n4 Handstand Push-ups\n8 KB Swings (70/53 lb)",[["Ring Muscle-up",["광배근","이두","가슴"],2,null,null],["Handstand Push-up",["어깨","삼두"],4,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],8,70,53]],"고기술 AMRAP. 링머슬업이 관건. Good: 8R+."],
+["Nick","Hero","For Time",null,null,"Cpl. Nicholas J. Xiarhos 추모 (2009, 아프가니스탄)","For Time\n10 Rounds:\n10 Dumbbell Push Press (40/25 lb)\n10 Dumbbell Box Step-ups (40/25 lb, 20 in)\n1 Rope Climb (15 ft)",[["Push Press",["어깨","삼두"],10,80,50],["Box Step-up",["대퇴사두","둔근","햄스트링"],10,null,null],["Rope Climb (15 ft)",["광배근","이두","코어"],1,null,null]],"덤벨+스텝업+로프클라임 10라운드. 목표 25~40분."],
+["OPT","Hero","For Time",null,null,"크로스핏 대표 Hero WOD (James FitzGerald 헌정)","For Time\n21-15-9\nClean (135/95 lb)\nRing Dip",[["Squat Clean",["전신","대퇴사두","승모근"],21,135,95],["Ring Dip",["가슴","어깨","삼두"],21,null,null]],"21-15-9 클린+링딥. Elizabeth와 유사하지만 링딥 버전."],
+["Oscar","Hero","For Time",null,null,"Sgt. 1st Class Oscar Vargas 추모 (2012)","For Time\n5 Rounds:\n5 Power Snatches (135/95 lb)\n10 Overhead Squats (135/95 lb)\n5 Bar Muscle-ups",[["Power Snatch",["전신","어깨","승모근"],5,135,95],["Overhead Squat",["대퇴사두","어깨","코어"],10,135,95],["Bar Muscle-up",["광배근","이두","가슴"],5,null,null]],"스내치+OHS+바머슬업. 고기술 Hero WOD. 목표 15~25분."],
+["Pheezy","Hero","AMRAP",null,20,"USMC Sgt. Travis L. Pfister 추모 (2010, 아프가니스탄)","20 min AMRAP\n5 Ring Muscle-ups\n10 Thrusters (95/65 lb)\n10 Toes-to-Bars",[["Ring Muscle-up",["광배근","이두","가슴"],5,null,null],["Thruster",["대퇴사두","어깨","둔근"],10,95,65],["Toes to Bar",["복근","광배근","고관절굴근"],10,null,null]],"머슬업+스러스터+T2B. 고강도 AMRAP."],
+["Randy","Hero","For Time",null,null,"LAPD Officer Randy Simmons 추모 (2008)","For Time\n75 Power Snatches (75/55 lb)",[["Power Snatch",["전신","어깨","승모근"],75,75,55]],"단일 동작 75회. 그립+어깨+후면사슬 지구력. 목표 5~10분."],
+["Ryan","Hero","For Time",5,null,"Cpl. Ryan Reyes 추모 (2008, 아프가니스탄)","5 Rounds For Time\n7 Ring Muscle-ups\n21 Burpees",[["Ring Muscle-up",["광배근","이두","가슴"],7,null,null],["Burpee",["전신","가슴"],21,null,null]],"총 35 머슬업+105 버피. 전신 파워+심폐 극한."],
+["Ship","Hero","For Time",null,null,"크로스핏 Hero WOD","For Time\n10 Rounds:\n10 Deadlifts (275/185 lb)\n10 Burpee Box Jumps (24/20 in)",[["Deadlift",["햄스트링","둔근","허리"],10,275,185],["Burpee",["전신","가슴"],10,null,null]],"고중량 데드리프트+버피박스점프 10라운드."],
+["Small","Hero","For Time",3,null,"Marine Gunnery Sgt. Aaron Kenefick 추모 (2009)","3 Rounds For Time\n3 Rope Climbs (15 ft)\n10 Thrusters (135/95 lb)\n21 KB Swings (70/53 lb)",[["Rope Climb (15 ft)",["광배근","이두","코어"],3,null,null],["Thruster",["대퇴사두","어깨","둔근"],10,135,95],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],21,70,53]],"로프클라임+스러스터+KB 3라운드. 목표 20~35분."],
+["The Seven","Hero","For Time",7,null,"카우스트 기지 CIA 요원 7인 추모 (2009, 아프가니스탄)","7 Rounds For Time\n7 HSPU\n7 Thrusters (135/95 lb)\n7 Knees-to-Elbow\n7 Deadlifts (245/165 lb)\n7 Burpees\n7 KB Swings (70/53 lb)\n7 Pull-ups",[["Handstand Push-up",["어깨","삼두"],7,null,null],["Thruster",["대퇴사두","어깨","둔근"],7,135,95],["Knees to Elbow",["복근","광배근"],7,null,null],["Deadlift",["햄스트링","둔근","허리"],7,245,165],["Burpee",["전신","가슴"],7,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],7,70,53],["Pull-up",["광배근","이두"],7,null,null]],"7×7×7×7. 전신 모든 패턴. 최난이도 Hero WOD."],
+["Tommy V","Hero","For Time",null,null,"SO1 Thomas J. Valentine 추모 (2008)","For Time\n21 Thrusters (115/75 lb)\n12 Rope Climbs (15 ft)\n15 Thrusters (115/75 lb)\n9 Rope Climbs (15 ft)\n9 Thrusters (115/75 lb)\n6 Rope Climbs (15 ft)",[["Thruster",["대퇴사두","어깨","둔근"],21,115,75],["Rope Climb (15 ft)",["광배근","이두","코어"],12,null,null]],"21-15-9 스러스터+12-9-6 로프클라임. 총 45+27회."],
+["TJ","Hero","For Time",5,null,"Lance Cpl. T.J. Antuna 추모 (2004, 이라크)","5 Rounds For Time\n10 Hang Snatches (75/55 lb)\n15 Push-ups\n20 Sit-ups\n25 Air Squats",[["Hang Power Snatch",["전신","어깨","승모근"],10,75,55],["Push-up",["가슴","어깨","삼두"],15,null,null],["AB Mat Sit-up",["복근","고관절굴근"],20,null,null],["Air Squat",["대퇴사두","둔근"],25,null,null]],"4종 5라운드. 목표 20~30분."],
+["Tiffiny","Hero","For Time",5,null,"Marine SSgt. Tiffiny Kretz 추모 (2009)","5 Rounds For Time\n35 DB Deadlifts (35/25 lb)\n25 Box Jumps (20 in)\n15 Push-ups",[["Deadlift",["햄스트링","둔근","허리"],35,70,50],["Box Jump",["대퇴사두","둔근","종아리"],25,null,null],["Push-up",["가슴","어깨","삼두"],15,null,null]],"DB 데드리프트+박스점프+푸시업 5라운드."],
+["Tucker","Hero","AMRAP",null,25,"Army Ranger Scott Tucker 추모 (2008, 아프가니스탄)","25 min AMRAP\n10 DB Hammer Curl\n10 DB Tricep Extension\n200m Run",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Pull-up",["광배근","이두"],10,null,null],["Push-up",["가슴","어깨","삼두"],10,null,null]],"팔 집중 AMRAP+달리기."],
+["Whitten","Hero","For Time",5,null,"Capt. Dan Whitten 추모 (2010, 아프가니스탄)","5 Rounds For Time\n22 KB Swings (1.5 pood)\n22 Box Jumps (24 in)\n400m Run",[["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],22,53,35],["Box Jump",["대퇴사두","둔근","종아리"],22,null,null],["Run 400m",["종아리","햄스트링","전신"],null,null,null]],"22=Whitten 부대 번호. 3종 5라운드. 목표 25~40분."],
+["Wrath","Hero","AMRAP",null,20,"SSgt. Kevin Dupont 추모","20 min AMRAP\n10 Pull-ups\n10 Push-ups\n10 Sit-ups\n10 Squats",[["Pull-up",["광배근","이두"],10,null,null],["Push-up",["가슴","어깨","삼두"],10,null,null],["AB Mat Sit-up",["복근","고관절굴근"],10,null,null],["Air Squat",["대퇴사두","둔근"],10,null,null]],"4종 바디웨이트 AMRAP. 입문하기 쉬운 Hero WOD."],
+["Zeus","Hero","For Time",null,null,"크로스핏 Hero WOD","For Time\n30 Wall Ball Shots (20/14 lb)\n30 SDHP (75/55 lb)\n30 Box Jumps (20 in)\n30 Push Press (75/55 lb)\n30 Row (Calories)",[["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],30,20,14],["Sumo Deadlift High Pull",["햄스트링","어깨","승모근"],30,75,55],["Box Jump",["대퇴사두","둔근","종아리"],30,null,null],["Push Press",["어깨","삼두"],30,75,55],["Rowing 500m",["광배근","햄스트링","전신"],null,null,null]],"5종 각 30회. CrossFit Filthy Fifty 간소화 버전."],
+["Zembiec","Hero","For Time",4,null,"Maj. Douglas A. Zembiec 추모 (2007, 이라크)","4 Rounds For Time\n400m Run\n10 Deadlifts (225/155 lb)\n50 Push-ups\n10 Pull-ups",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Deadlift",["햄스트링","둔근","허리"],10,225,155],["Push-up",["가슴","어깨","삼두"],50,null,null],["Pull-up",["광배근","이두"],10,null,null]],"달리기+DL+푸시업+풀업 4라운드."],
+["Lodin","Hero","For Time",null,null,"Petty Officer 2nd Class Marc Lee 추모 (2006, 이라크)","For Time\n30 Handstand Push-ups\n40 Pull-ups\n50 KB Swings (53/35 lb)\n60 Sit-ups\n70 Burpees",[["Handstand Push-up",["어깨","삼두"],30,null,null],["Pull-up",["광배근","이두"],40,null,null],["AKBS (American KB Swing)",["둔근","햄스트링","어깨"],50,53,35],["AB Mat Sit-up",["복근","고관절굴근"],60,null,null],["Burpee",["전신","가슴"],70,null,null]],"5종 점증 구조. 총 250회. 목표 30~50분."],
+
+// ══ OPEN (65개) ════════════════════════════════════
+// 2011
+["11.1","Open","AMRAP",null,10,"CrossFit Open 2011 - WOD 1","10 min AMRAP\n30 Double Unders\n15 Power Snatches (75/55 lb)",[["Double Under",["종아리","전신"],30,null,null],["Power Snatch",["전신","어깨","승모근"],15,75,55]],"오픈 역사 첫 번째 공식 WOD. Top 5%: 9R+."],
+["11.2","Open","AMRAP",null,15,"CrossFit Open 2011 - WOD 2","15 min AMRAP\n9 Deadlifts (155/100 lb)\n12 Push-ups\n15 Box Jumps (24/20 in)",[["Deadlift",["햄스트링","둔근","허리"],9,155,100],["Push-up",["가슴","어깨","삼두"],12,null,null],["Box Jump",["대퇴사두","둔근","종아리"],15,null,null]],"3종 15분 AMRAP. 비교적 접근하기 쉬운 오픈 와드."],
+["11.3","Open","AMRAP",null,5,"CrossFit Open 2011 - WOD 3","5 min AMRAP\n165 lb Squat Clean & Jerk\n(as many reps as possible)",[["Clean & Jerk",["전신","어깨","대퇴사두"],null,165,110]],"5분 단일 동작 최대랩. 165lb 클린앤저크."],
+["11.4","Open","For Time","10",null,"CrossFit Open 2011 - WOD 4 (10-min cap)","For Time (10-min cap)\n60 Bar-facing Burpees\n30 OHS (120/90 lb)\n10 Muscle-ups",[["Burpee",["전신","가슴"],60,null,null],["Overhead Squat",["대퇴사두","어깨","코어"],30,120,90],["Ring Muscle-up",["광배근","이두","가슴"],10,null,null]],"버피→OHS→머슬업 타임캡. 머슬업까지 간 선수 극소수."],
+["11.5","Open","AMRAP",null,20,"CrossFit Open 2011 - WOD 5","20 min AMRAP\n5 Power Cleans (145/100 lb)\n10 Toes-to-Bar\n15 Wall Ball Shots (20/14 lb)",[["Power Clean",["전신","대퇴사두","승모근"],5,145,100],["Toes to Bar",["복근","광배근","고관절굴근"],10,null,null],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],15,20,14]],"클린+T2B+월볼 20분 AMRAP. 오픈 최초 T2B 등장."],
+["11.6","Open","For Time","21-18-15-12-9-6-3",null,"CrossFit Open 2011 - WOD 6 (2016년 16.5로 반복)","21-18-15-12-9-6-3 For Time\nThrusters (100/65 lb)\nBurpees",[["Thruster",["대퇴사두","어깨","둔근"],21,100,65],["Burpee",["전신","가슴"],21,null,null]],"총 84+84회. 가장 고통스러운 오픈 와드. 2016년 재등장."],
+// 2012
+["12.1","Open","AMRAP",null,7,"CrossFit Open 2012 - WOD 1","7 min AMRAP\nBurpees",[["Burpee",["전신","가슴"],null,null,null]],"7분 버피 단일 동작 최대랩. 엘리트 120+회."],
+["12.2","Open","AMRAP",null,10,"CrossFit Open 2012 - WOD 2 (Ascending Snatch)","10 min AMRAP\n30 Snatches (75/45 lb)\n30 Snatches (135/75 lb)\n30 Snatches (165/100 lb)\nMax Snatches (210/120 lb)",[["Power Snatch",["전신","어깨","승모근"],30,75,45]],"점증 무게 스내치 10분. 강도 높을수록 점수 차별화."],
+["12.3","Open","AMRAP",null,18,"CrossFit Open 2012 - WOD 3","18 min AMRAP\n15 Box Jumps (24/20 in)\n12 Push Press (115/75 lb)\n9 Toes-to-Bar",[["Box Jump",["대퇴사두","둔근","종아리"],15,null,null],["Push Press",["어깨","삼두"],12,115,75],["Toes to Bar",["복근","광배근","고관절굴근"],9,null,null]],"3종 18분 AMRAP. 박스점프+PP+T2B."],
+["12.4","Open","AMRAP",null,12,"CrossFit Open 2012 - WOD 4","12 min AMRAP\n150 Wall Balls (20/14 lb)\n90 Double Unders\n30 Ring Muscle-ups",[["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],150,20,14],["Double Under",["종아리","전신"],90,null,null],["Ring Muscle-up",["광배근","이두","가슴"],30,null,null]],"'The 150 Wall Ball' 전설. 머슬업까지 간 선수 극소수."],
+["12.5","Open","For Time","21-15-9",null,"CrossFit Open 2012 - WOD 5 (Fran with heavier weight)","21-15-9 For Time\nThrusters (100/65 lb)\nChest-to-Bar Pull-ups",[["Thruster",["대퇴사두","어깨","둔근"],21,100,65],["Chest to Bar",["광배근","이두"],21,null,null]],"Fran 헤비 버전. C2B 풀업+무거운 스러스터."],
+// 2013
+["13.1","Open","AMRAP",null,17,"CrossFit Open 2013 - WOD 1","17 min AMRAP\n40 Burpees\n30 Snatches (75/45 lb)\n30 Burpees\n30 Snatches (135/75 lb)\n20 Burpees\n30 Snatches (165/100 lb)\n10 Burpees\nMax Snatches (210/120 lb)",[["Burpee",["전신","가슴"],40,null,null],["Power Snatch",["전신","어깨","승모근"],30,75,45]],"버피+스내치 점증. 버피 페이스 유지가 핵심."],
+["13.2","Open","AMRAP",null,10,"CrossFit Open 2013 - WOD 2","10 min AMRAP\n5 Shoulder-to-Overhead (115/75 lb)\n10 Deadlifts (115/75 lb)\n15 Box Jumps (24/20 in)",[["Push Press",["어깨","삼두"],5,115,75],["Deadlift",["햄스트링","둔근","허리"],10,115,75],["Box Jump",["대퇴사두","둔근","종아리"],15,null,null]],"S2O+DL+박스점프 10분 AMRAP. 동일 무게 2바벨 동작."],
+["13.3","Open","AMRAP",null,12,"CrossFit Open 2013 - WOD 3 (identical to 12.4)","12 min AMRAP\n150 Wall Balls (20/14 lb)\n90 Double Unders\n30 Ring Muscle-ups",[["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],150,20,14],["Double Under",["종아리","전신"],90,null,null],["Ring Muscle-up",["광배근","이두","가슴"],30,null,null]],"12.4와 동일. 전년도 대비 성장 측정."],
+["13.4","Open","AMRAP",null,7,"CrossFit Open 2013 - WOD 4","7 min AMRAP\n3 Clean & Jerk (135/95 lb)\n3 Toes-to-Bar\n6 Clean & Jerk\n6 Toes-to-Bar\n...(+3 each round)",[["Clean & Jerk",["전신","어깨","대퇴사두"],3,135,95],["Toes to Bar",["복근","광배근","고관절굴근"],3,null,null]],"클린앤저크+T2B 점증 구조 7분. 페이스 관리 필수."],
+["13.5","Open","For Time","21-18-15-12-9-6-3",null,"CrossFit Open 2013 - WOD 5 (4분 타임캡)","4 min AMRAP\n15 Thrusters (100/65 lb)\n15 C2B Pull-ups\n(time extends for each completion)",[["Thruster",["대퇴사두","어깨","둔근"],15,100,65],["Chest to Bar",["광배근","이두"],15,null,null]],"스러스터+C2B 무제한 연장 포맷. 완주할수록 시간 추가."],
+// 2014
+["14.1","Open","AMRAP",null,10,"CrossFit Open 2014 - WOD 1 (identical to 11.1)","10 min AMRAP\n30 Double Unders\n15 Power Snatches (75/55 lb)",[["Double Under",["종아리","전신"],30,null,null],["Power Snatch",["전신","어깨","승모근"],15,75,55]],"11.1과 동일. 3년 성장 측정용."],
+["14.2","Open","AMRAP",null,3,"CrossFit Open 2014 - WOD 2 (rolling 3-min windows)","Every 3 min for as long as possible:\n2 OHS (95/65 lb)\n2 C2B Pull-ups\n4 OHS\n4 C2B\n6 OHS\n6 C2B...",[["Overhead Squat",["대퇴사두","어깨","코어"],2,95,65],["Chest to Bar",["광배근","이두"],2,null,null]],"OHS+C2B 점증. 3분 창 안에 완료 못하면 종료."],
+["14.3","Open","For Time",null,8,"CrossFit Open 2014 - WOD 3 (8-min cap)","8 min AMRAP\n10 DL (135/95 lb) + 15 Box Jumps\n15 DL (185/135 lb) + 15 BJ\n20 DL (225/155 lb) + 15 BJ\n25 DL (275/185 lb) + 15 BJ\n30 DL (315/205 lb) + 15 BJ",[["Deadlift",["햄스트링","둔근","허리"],10,135,95],["Box Jump",["대퇴사두","둔근","종아리"],15,null,null]],"DL 점증 무게+박스점프. 8분 타임캡."],
+["14.4","Open","AMRAP",null,14,"CrossFit Open 2014 - WOD 4 (2023년 23.1로 재등장)","14 min AMRAP\n60 Cal Row\n50 Toes-to-Bars\n40 Wall Balls (20/14 lb)\n30 Cleans (135/95 lb)\n20 Ring Muscle-ups",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Toes to Bar",["복근","광배근","고관절굴근"],50,null,null],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],40,20,14],["Power Clean",["전신","대퇴사두","승모근"],30,135,95],["Ring Muscle-up",["광배근","이두","가슴"],20,null,null]],"5종 사다리. 전설적 오픈 와드. 머슬업 완주 극소수."],
+["14.5","Open","For Time","21-18-15-12-9-6-3",null,"CrossFit Open 2014 - WOD 5 (identical to 11.6)","21-18-15-12-9-6-3 For Time\nThrusters (95/65 lb)\nBurpees",[["Thruster",["대퇴사두","어깨","둔근"],21,95,65],["Burpee",["전신","가슴"],21,null,null]],"11.6 재등장. 역대 가장 고통스러운 오픈 마지막 WOD."],
+// 2015
+["15.1","Open","AMRAP",null,9,"CrossFit Open 2015 - WOD 1","9 min AMRAP\n15 Toes-to-Bars\n10 Deadlifts (115/75 lb)\n5 Snatches (115/75 lb)",[["Toes to Bar",["복근","광배근","고관절굴근"],15,null,null],["Deadlift",["햄스트링","둔근","허리"],10,115,75],["Power Snatch",["전신","어깨","승모근"],5,115,75]],"T2B+DL+스내치. 동일 바벨 무게 3동작."],
+["15.2","Open","AMRAP",null,null,"CrossFit Open 2015 - WOD 2 (rolling 3-min windows)","Every 3 min:\n2 OHS (95/65 lb)\n2 C2B Pull-ups\n4 OHS + 4 C2B\n6 OHS + 6 C2B...",[["Overhead Squat",["대퇴사두","어깨","코어"],2,95,65],["Chest to Bar",["광배근","이두"],2,null,null]],"14.2 재등장. OHS+C2B 점증 3분 창."],
+["15.3","Open","AMRAP",null,14,"CrossFit Open 2015 - WOD 3","14 min AMRAP\n7 Muscle-ups\n50 Wall Balls (20/14 lb)\n100 Double Unders",[["Ring Muscle-up",["광배근","이두","가슴"],7,null,null],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],50,20,14],["Double Under",["종아리","전신"],100,null,null]],"머슬업+월볼+더블언더. 고기술 고볼륨 AMRAP."],
+["15.4","Open","AMRAP",null,8,"CrossFit Open 2015 - WOD 4 (8-min cap)","Complete as many rounds+reps as possible in 8 min:\n3 HSPU → 3 Clean (185/125 lb)\n6 HSPU → 3 Clean\n9 HSPU → 3 Clean...",[["Handstand Push-up",["어깨","삼두"],3,null,null],["Squat Clean",["전신","대퇴사두","승모근"],3,185,125]],"HSPU+고중량 클린 교대 점증. 클린 중량이 관건."],
+["15.5","Open","For Time","27-21-15-9",null,"CrossFit Open 2015 - WOD 5","27-21-15-9 For Time\nRow (Calories)\nThrusters (95/65 lb)",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Thruster",["대퇴사두","어깨","둔근"],27,95,65]],"로잉+스러스터 점감. 총 72 Cal+72 스러스터."],
+// 2016
+["16.1","Open","AMRAP",null,20,"CrossFit Open 2016 - WOD 1","20 min AMRAP\n25ft Overhead Walking Lunges (95/65 lb)\n8 Bar Muscle-ups\n25ft OWL\n8 Bar Muscle-ups...",[["Overhead Walking Lunge",["대퇴사두","둔근","어깨"],null,95,65],["Bar Muscle-up",["광배근","이두","가슴"],8,null,null]],"런지+바머슬업 교대 20분. 머슬업 스케일 접근성 낮음."],
+["16.2","Open","AMRAP",null,4,"CrossFit Open 2016 - WOD 2 (4-min rolling windows)","25 Toes-to-Bars\n50 DU\n15 Squat Cleans (135/85 lb)\n(rolling 4-min windows)",[["Toes to Bar",["복근","광배근","고관절굴근"],25,null,null],["Double Under",["종아리","전신"],50,null,null],["Squat Clean",["전신","대퇴사두","승모근"],15,135,85]],"T2B+DU+스쿼트클린. 4분 창 포맷."],
+["16.3","Open","AMRAP",null,7,"CrossFit Open 2016 - WOD 3","7 min AMRAP\n10 Power Snatches (75/55 lb)\n3 Bar Muscle-ups",[["Power Snatch",["전신","어깨","승모근"],10,75,55],["Bar Muscle-up",["광배근","이두","가슴"],3,null,null]],"파워스내치+바머슬업 7분. 머슬업이 관건."],
+["16.4","Open","For Time",null,13,"CrossFit Open 2016 - WOD 4 (13-min cap)","13 min\n55 DL (225/155 lb)\n55 Wall Balls (20/14 lb)\n55 Cal Row\n55 HSPU",[["Deadlift",["햄스트링","둔근","허리"],55,225,155],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],55,20,14],["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Handstand Push-up",["어깨","삼두"],55,null,null]],"4종 각 55회. 고볼륨 타임캡. HSPU까지 간 선수 극소수."],
+["16.5","Open","For Time","21-18-15-12-9-6-3",null,"CrossFit Open 2016 - WOD 5 (11.6 반복)","21-18-15-12-9-6-3 For Time\nThrusters (95/65 lb)\nBar-facing Burpees",[["Thruster",["대퇴사두","어깨","둔근"],21,95,65],["Burpee",["전신","가슴"],21,null,null]],"11.6의 재등장. 역대 최악의 마지막 와드 중 하나."],
+// 2017
+["17.1","Open","AMRAP",null,20,"CrossFit Open 2017 - WOD 1","20 min AMRAP\n10 DB Snatches (50/35 lb)\n15 Burpee Box Jump Overs (24/20 in)",[["Power Snatch",["전신","어깨","승모근"],10,50,35],["Burpee",["전신","가슴"],15,null,null]],"덤벨 스내치+버피박스점프오버. 덤벨 오픈의 시작."],
+["17.2","Open","AMRAP",null,12,"CrossFit Open 2017 - WOD 2","12 min AMRAP\n2 DB Walking Lunges (50/35 lb)\n4 DB Hang C&J\n6 Bar-facing Burpees\n(+2 lunges, +2 C&J each round)",[["Walking Lunge",["대퇴사두","둔근","햄스트링"],2,null,null],["Clean & Jerk",["전신","어깨","대퇴사두"],4,100,70],["Burpee",["전신","가슴"],6,null,null]],"DB+버피 점증 12분 AMRAP."],
+["17.3","Open","AMRAP",null,8,"CrossFit Open 2017 - WOD 3 (8-min rolling windows)","8 min AMRAP\n6 C2B Pull-ups\n6 Squat Snatches (95/65 lb)\n→ 5 rounds → heavier...\n(rolling 8-min windows, ascending weight)",[["Chest to Bar",["광배근","이두"],6,null,null],["Squat Snatch",["전신","어깨","승모근"],6,95,65]],"C2B+스쿼트스내치 점증 무게 8분 창 포맷."],
+["17.4","Open","For Time",null,13,"CrossFit Open 2017 - WOD 4 (13-min cap)","13 min\n55 DL (225/155 lb)\n55 Wall Balls (20/14 lb)\n55 Cal Row\n55 HSPU",[["Deadlift",["햄스트링","둔근","허리"],55,225,155],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],55,20,14],["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Handstand Push-up",["어깨","삼두"],55,null,null]],"16.4 재등장. 4종 각 55회 타임캡."],
+["17.5","Open","For Time","10",null,"CrossFit Open 2017 - WOD 5","10 Rounds For Time\n9 Thrusters (95/65 lb)\n35 Double Unders",[["Thruster",["대퇴사두","어깨","둔근"],9,95,65],["Double Under",["종아리","전신"],35,null,null]],"총 90 스러스터+350 더블언더. 줄넘기 실수 금지."],
+// 2018
+["18.1","Open","AMRAP",null,20,"CrossFit Open 2018 - WOD 1","20 min AMRAP\n8 Toes-to-Bars\n10 DB Hang C&J (50/35 lb)\n14/12 Cal Row",[["Toes to Bar",["복근","광배근","고관절굴근"],8,null,null],["Hang Power Clean",["전신","승모근"],10,50,35],["Rowing 500m",["광배근","햄스트링","전신"],null,null,null]],"덤벨 크린앤저크+T2B+로잉 20분."],
+["18.2","Open","For Time","1-2-3-4-5-6-7-8-9-10",null,"CrossFit Open 2018 - WOD 2 (12-min cap)","1-2-3-4-5-6-7-8-9-10 For Time (12-min cap)\nDB Squats (50/35 lb)\nBar-facing Burpees\n→ then max Clean (275/185 lb) with remaining time",[["Air Squat",["대퇴사두","둔근"],10,50,35],["Burpee",["전신","가슴"],10,null,null],["Squat Clean",["전신","대퇴사두","승모근"],null,275,185]],"DB스쿼트+버피 점증 후 남은 시간에 클린 최대랩."],
+["18.3","Open","AMRAP",null,14,"CrossFit Open 2018 - WOD 3","14 min AMRAP\n100 DU\n20 OHS (115/80 lb)\n100 DU\n12 Ring Muscle-ups\n100 DU\n200ft Handstand Walk\n100 DU\n...",[["Double Under",["종아리","전신"],100,null,null],["Overhead Squat",["대퇴사두","어깨","코어"],20,115,80],["Ring Muscle-up",["광배근","이두","가슴"],12,null,null],["Handstand Walk",["어깨","삼두","코어"],null,null,null]],"DU→OHS→머슬업→핸드스탠드워크 사다리. 극고난도."],
+["18.4","Open","For Time",null,9,"CrossFit Open 2018 - WOD 4 (9-min cap)","9 min\n21 DL (225/155 lb)\n21 HSPU\n15 DL (225/155 lb)\n15 HSPU\n9 DL (225/155 lb)\n9 HSPU\nMax Strict HSPU",[["Deadlift",["햄스트링","둔근","허리"],21,225,155],["Handstand Push-up",["어깨","삼두"],21,null,null]],"데드리프트+HSPU 21-15-9. Diane과 유사하지만 더 무겁고 HSPU."],
+["18.5","Open","AMRAP",null,7,"CrossFit Open 2018 - WOD 5 (identical to 11.5?)","7 min AMRAP\n3 Thrusters (100/65 lb)\n3 C2B Pull-ups\n6 Thrusters\n6 C2B\n9 Thrusters\n9 C2B...",[["Thruster",["대퇴사두","어깨","둔근"],3,100,65],["Chest to Bar",["광배근","이두"],3,null,null]],"스러스터+C2B 점증 7분. 13.5 구조 재등장."],
+// 2019
+["19.1","Open","AMRAP",null,15,"CrossFit Open 2019 - WOD 1","15 min AMRAP\n19 Wall Balls (20/14 lb)\n19 Cal Row",[["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],19,20,14],["Rowing 500m",["광배근","햄스트링","전신"],null,null,null]],"월볼+로잉 단순 2종. 페이스 유지가 전부."],
+["19.2","Open","AMRAP",null,8,"CrossFit Open 2019 - WOD 2 (8-min rolling windows)","Begin with 8 min AMRAP:\n25 Toes-to-Bars\n50 Double Unders\n15 Squat Cleans (135/85 lb)\n→ rolling 8-min windows",[["Toes to Bar",["복근","광배근","고관절굴근"],25,null,null],["Double Under",["종아리","전신"],50,null,null],["Squat Clean",["전신","대퇴사두","승모근"],15,135,85]],"T2B+DU+스쿼트클린 8분 창. 16.2 재등장."],
+["19.3","Open","For Time",null,10,"CrossFit Open 2019 - WOD 3 (10-min cap)","200ft DB OH Walking Lunges (50/35 lb)\n50 DB Box Step-ups (50/35 lb, 24/20 in)\n50 Strict HSPU\n200ft HS Walk",[["Overhead Walking Lunge",["대퇴사두","둔근","어깨"],null,50,35],["Box Step-up",["대퇴사두","둔근","햄스트링"],50,null,null],["Handstand Push-up",["어깨","삼두"],50,null,null],["Handstand Walk",["어깨","삼두","코어"],null,null,null]],"DB 런지→스텝업→HSPU→핸드스탠드워크. 어깨 극한."],
+["19.4","Open","For Time","3",null,"CrossFit Open 2019 - WOD 4 (3-min rolling windows)","3 min AMRAP:\n10 Single-leg Squats (alt)\n10 Bar Muscle-ups\n10 Hang C&J (95/65 lb)\n(rolling 3-min windows)",[["Pistol Squat",["대퇴사두","둔근","코어"],10,null,null],["Bar Muscle-up",["광배근","이두","가슴"],10,null,null],["Hang Power Clean",["전신","승모근"],10,95,65]],"피스톨스쿼트+바머슬업+행파워클린. 3분 창."],
+["19.5","Open","For Time","33",null,"CrossFit Open 2019 - WOD 5 (33-min cap)","33 Thrusters (95/65 lb)\n33 C2B Pull-ups\n33 DU\n33 Thrusters (135/85 lb)\n33 Bar Muscle-ups\n33 DU\n33 Thrusters (185/115 lb)\n33 BMU\n33 DU",[["Thruster",["대퇴사두","어깨","둔근"],33,95,65],["Chest to Bar",["광배근","이두"],33,null,null],["Double Under",["종아리","전신"],33,null,null],["Bar Muscle-up",["광배근","이두","가슴"],33,null,null]],"스러스터 점증+C2B/BMU. 마지막 오픈 3세트 구조."],
+// 2020
+["20.1","Open","For Time","10",null,"CrossFit Open 2020 - WOD 1 (10-min cap)","10 Rounds For Time (10-min cap)\n8 Ground-to-Overhead (65/45 lb)\n10 Bar-facing Burpees",[["Power Snatch",["전신","어깨","승모근"],8,65,45],["Burpee",["전신","가슴"],10,null,null]],"총 80 GTO+100 버피. 타임캡 10분."],
+["20.2","Open","AMRAP",null,20,"CrossFit Open 2020 - WOD 2","20 min AMRAP\n4 DB Thrusters (50/35 lb)\n6 Toes-to-Bars\n24 DU",[["Thruster",["대퇴사두","어깨","둔근"],4,100,70],["Toes to Bar",["복근","광배근","고관절굴근"],6,null,null],["Double Under",["종아리","전신"],24,null,null]],"DB스러스터+T2B+DU 20분 AMRAP."],
+["20.3","Open","For Time",null,9,"CrossFit Open 2020 - WOD 3 (9-min cap, then 9 more)","21 DL (225/155 lb)\n21 HSPU\n15 DL\n15 HSPU\n9 DL\n9 HSPU\n→ 9 more min: 21 DL (315/205) + 21 Ring HSPU...",[["Deadlift",["햄스트링","둔근","허리"],21,225,155],["Handstand Push-up",["어깨","삼두"],21,null,null]],"18.4 재등장+연장 포맷. 더 무거운 DL+링HSPU."],
+["20.4","Open","For Time",null,20,"CrossFit Open 2020 - WOD 4 (20-min cap)","30 Box Jump Overs (24/20 in)\n15 Clean & Jerks (95/65 lb)\n30 BJO\n15 C&J (135/85 lb)\n30 BJO\n10 C&J (185/115 lb)\n30 BJO\n10 C&J (225/145 lb)\n30 BJO\n5 C&J (275/175 lb)",[["Box Jump",["대퇴사두","둔근","종아리"],30,null,null],["Clean & Jerk",["전신","어깨","대퇴사두"],15,95,65]],"BJO+C&J 점증 무게. 총 150 박스점프오버."],
+["20.5","Open","AMRAP",null,null,"CrossFit Open 2020 - WOD 5","40 Ring Muscle-ups\n40-cal Bike\n40 Handstand Push-ups",[["Ring Muscle-up",["광배근","이두","가슴"],40,null,null],["Bike 1000m",["대퇴사두","종아리","전신"],null,null,null],["Handstand Push-up",["어깨","삼두"],40,null,null]],"링머슬업+바이크+HSPU. 완주자 극소수."],
+// 2021
+["21.1","Open","AMRAP",null,15,"CrossFit Open 2021 - WOD 1","15 min AMRAP\n1 Wall Walk\n10 DB Snatches (50/35 lb)\n1 Wall Walk\n12 DB Snatches\n...(+2 each round)",[["Handstand Push-up",["어깨","삼두","코어"],1,null,null],["Power Snatch",["전신","어깨","승모근"],10,50,35]],"월워크+DB스내치 점증. 어깨 누적 피로."],
+["21.2","Open","AMRAP",null,20,"CrossFit Open 2021 - WOD 2","20 min AMRAP\n95 DU\n5 Squat Snatches (65/45 lb)\n(next rd: 100 DU, 5 Sn 95/65...)",[["Double Under",["종아리","전신"],95,null,null],["Squat Snatch",["전신","어깨","승모근"],5,65,45]],"DU+스쿼트스내치. 무게 점증 포맷 20분."],
+["21.3","Open","For Time","10",null,"CrossFit Open 2021 - WOD 3 & 4","For Time (10-min cap)\n10 Front Squats (135/85 lb)\n10 Chest-to-Bar\n10 Toes-to-Bars\n10 Squat Cleans (135/85 lb)\n... (×5 rounds)",[["Front Squat",["대퇴사두","둔근","코어"],10,135,85],["Chest to Bar",["광배근","이두"],10,null,null],["Toes to Bar",["복근","광배근","고관절굴근"],10,null,null],["Squat Clean",["전신","대퇴사두","승모근"],10,135,85]],"4종 5라운드 10분 타임캡."],
+// 2022
+["22.1","Open","AMRAP",null,15,"CrossFit Open 2022 - WOD 1","15 min AMRAP\n3 Wall Walks\n12 DB Snatches (50/35 lb)\n15 Box Jump Overs (24/20 in)",[["Handstand Push-up",["어깨","삼두","코어"],3,null,null],["Power Snatch",["전신","어깨","승모근"],12,50,35],["Box Jump",["대퇴사두","둔근","종아리"],15,null,null]],"월워크+DB스내치+박스점프오버 15분 AMRAP."],
+["22.2","Open","For Time","1-2-3-10-9-8-1",null,"CrossFit Open 2022 - WOD 2 (10-min cap)","For Time (10-min cap)\n1-2-3-4-5-6-7-8-9-10-9-8-7-6-5-4-3-2-1 reps:\nDeadlifts (225/155 lb)\nBar-facing Burpees",[["Deadlift",["햄스트링","둔근","허리"],10,225,155],["Burpee",["전신","가슴"],10,null,null]],"총 100 DL+100 버피. 다이아몬드 랩스킴. 완주자 1%."],
+["22.3","Open","For Time",null,12,"CrossFit Open 2022 - WOD 3 (12-min cap)","12 min\n21 GHD Sit-ups\n21 Thrusters (95/65 lb)\n18 GHD Sit-ups\n18 Thrusters\n15 GHD + 15 Thrusters\n12+12 / 9+9 / 6+6 / 3+3",[["GHD Sit-up",["복근","고관절굴근"],21,null,null],["Thruster",["대퇴사두","어깨","둔근"],21,95,65]],"GHD싯업+스러스터 점감. GHD 경험 없으면 극히 위험."],
+// 2023
+["23.1","Open","AMRAP",null,14,"CrossFit Open 2023 - WOD 1 (14.4 재등장)","14 min AMRAP\n60 Cal Row\n50 Toes-to-Bars\n40 Wall Balls (20/14 lb)\n30 Cleans (135/95 lb)\n20 Ring Muscle-ups",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Toes to Bar",["복근","광배근","고관절굴근"],50,null,null],["Wall Ball (20/14 lb)",["대퇴사두","어깨","둔근"],40,20,14],["Power Clean",["전신","대퇴사두","승모근"],30,135,95],["Ring Muscle-up",["광배근","이두","가슴"],20,null,null]],"14.4 재등장. 9년 성장 측정."],
+["23.2","Open","For Time",null,20,"CrossFit Open 2023 - WOD 2 (20-min cap)","For Time (20-min cap)\n1000m Row\n50 Burpee Box Jump Overs (24/20 in)\n1000m Row",[["Rowing 500m",["광배근","햄스트링","전신"],null,null,null],["Burpee",["전신","대퇴사두","둔근"],50,null,null]],"로잉-BBJO-로잉 샌드위치. 20분 타임캡."],
+["23.3","Open","For Time",null,null,"CrossFit Open 2023 - WOD 3","For Time\n5 Rounds:\n5 Thrusters (95/65 lb)\n10 Chest-to-Bar Pull-ups\n5 Thrusters (135/85 lb)\n10 Bar Muscle-ups\n5 Thrusters (185/115 lb)\n10 Bar Muscle-ups",[["Thruster",["대퇴사두","어깨","둔근"],5,95,65],["Chest to Bar",["광배근","이두"],10,null,null],["Bar Muscle-up",["광배근","이두","가슴"],10,null,null]],"스러스터 점증+C2B/BMU. 오픈 최종 WOD."],
+// 2024
+["24.1","Open","AMRAP",null,15,"CrossFit Open 2024 - WOD 1","15 min AMRAP\n3 Lateral Burpees over DB\n3 DB Hang C2OH (50/35 lb)\n30ft Walking Lunge\n(+3 each round)",[["Burpee",["전신","가슴"],3,null,null],["Hang Power Clean",["전신","승모근"],3,50,35],["Walking Lunge",["대퇴사두","둔근","햄스트링"],null,null,null]],"버피+DB 크린오버헤드+런지 점증. 하체 누적 피로."],
+["24.2","Open","For Time",null,20,"CrossFit Open 2024 - WOD 2 (20-min cap)","20-min AMRAP (cap)\n4 Deadlifts (185/125 lb)\n6 Burpee Box Jumps (24/20 in)\n8 Hang Power Cleans (185/125 lb)\n10 Box Jump Overs (24/20 in)\n...",[["Deadlift",["햄스트링","둔근","허리"],4,185,125],["Burpee",["전신","가슴"],6,null,null],["Hang Power Clean",["전신","승모근"],8,185,125],["Box Jump",["대퇴사두","둔근","종아리"],10,null,null]],"DL+버피박스점프+HPC+박스점프오버 반복. 20분."],
+["24.3","Open","For Time",null,25,"CrossFit Open 2024 - WOD 3 (25-min cap)","25-min cap\n5 Strict Pull-ups\n10 Push-ups\n15 Air Squats\n25 Double Unders\n5 Pull-ups\n10 PU\n15 AS\n25 DU\n...",[["Pull-up",["광배근","이두"],5,null,null],["Push-up",["가슴","어깨","삼두"],10,null,null],["Air Squat",["대퇴사두","둔근"],15,null,null],["Double Under",["종아리","전신"],25,null,null]],"Cindy+DU 구조. 모든 레벨 접근 가능."],
+// 2025
+["25.1","Open","AMRAP",null,15,"CrossFit Open 2025 - WOD 1","15 min AMRAP\n3 Lateral Burpees over DB\n3 DB Hang Clean-to-Overhead (50/35 lb)\n30ft Walking Lunge\n(+3 reps each round)",[["Burpee",["전신","가슴"],3,null,null],["Hang Power Clean",["전신","승모근"],3,50,35],["Walking Lunge",["대퇴사두","둔근","햄스트링"],null,null,null]],"2025 오픈 첫 번째. 24.1과 유사 점증 구조."],
+["25.2","Open","For Time",null,15,"CrossFit Open 2025 - WOD 2 (15-min cap)","For Time (15-min cap)\n21 Thrusters (95/65 lb)\n21 Chest-to-Bar Pull-ups\n15 Thrusters (135/85 lb)\n15 Bar Muscle-ups\n9 Thrusters (185/115 lb)\n9 Bar Muscle-ups",[["Thruster",["대퇴사두","어깨","둔근"],21,95,65],["Chest to Bar",["광배근","이두"],21,null,null],["Bar Muscle-up",["광배근","이두","가슴"],9,null,null]],"스러스터 점증+풀업/머슬업 21-15-9 구조."],
+["25.3","Open","For Time",null,20,"CrossFit Open 2025 - WOD 3 (20-min cap)","For Time (20-min cap)\n400m Run\n21 KB Snatches (53/35 lb)\n400m Run\n18 KB Snatches\n400m Run\n15 KB Snatches\n...",[["Run 400m",["종아리","햄스트링","전신"],null,null,null],["Power Snatch",["전신","어깨","승모근"],21,53,35]],"달리기+KB스내치 점감 구조. 2025 오픈 마지막."],
+];
+
+// ─────────────────────────────────────────────────────
+// RAW → NAMED_WODS 변환
+// ─────────────────────────────────────────────────────
+const NAMED_WODS = RAW_WODS.map(([name,cat,type,rounds,time,tribute,desc,mvRaw,note])=>({
+  name, cat, type, rounds, time, tribute, desc,
+  movements: mvRaw.map(([n,muscles,reps,wM,wF])=>({name:n,muscles,reps,wM,wF})),
+  note,
+}));
+
+// ─────────────────────────────────────────────────────
+// 상수
+// ─────────────────────────────────────────────────────
+const LEVEL_INDEX  = {RXD:0,A:1,B:2,C:3};
+const WOD_TYPES    = ["For Time","AMRAP","EMOM","Death by","For Load","Tabata","네임드 와드"];
+const LEVELS       = ["RXD","A","B","C"];
+const TIME_OPTIONS = [10,15,20,30];
+const ROUNDS_OPT   = [3,4,5,6,7];
+const BODY_REGIONS = ["상체","코어","하체","전신"];
+const LVL_COLORS   = {RXD:"#ef4444",A:"#f97316",B:"#eab308",C:"#22c55e"};
+const TYPE_COLOR   = {"For Time":"#ef4444","AMRAP":"#3b82f6","EMOM":"#8b5cf6","Death by":"#f97316","For Load":"#eab308","Tabata":"#ec4899","네임드 와드":"#a855f7"};
+const CAT_COLOR    = {Girls:{bg:"#0a1a12",text:"#34d399",border:"#064e3b"},Hero:{bg:"#1a0808",text:"#f87171",border:"#7f1d1d"},Open:{bg:"#0a1220",text:"#60a5fa",border:"#1e3a5f"}};
+
+const MUSCLE_MAP = {
+  "어깨":       {pts:[{x:158,y:148,r:20},{x:242,y:148,r:20}],                                                                         side:"front"},
+  "가슴":       {pts:[{x:178,y:182,r:22},{x:222,y:182,r:22}],                                                                         side:"front"},
+  "삼두":       {pts:[{x:136,y:195,r:12},{x:264,y:195,r:12}],                                                                         side:"front"},
+  "복근":       {pts:[{x:193,y:215,r:12},{x:207,y:215,r:12},{x:193,y:238,r:12},{x:207,y:238,r:12},{x:193,y:261,r:12},{x:207,y:261,r:12}],side:"front"},
+  "고관절굴근": {pts:[{x:182,y:300,r:14},{x:218,y:300,r:14}],                                                                         side:"front"},
+  "대퇴사두":   {pts:[{x:172,y:345,r:20},{x:228,y:345,r:20},{x:172,y:375,r:18},{x:228,y:375,r:18}],                                  side:"front"},
+  "종아리":     {pts:[{x:175,y:455,r:13},{x:225,y:455,r:13}],                                                                         side:"front"},
+  "승모근":     {pts:[{x:190,y:138,r:18},{x:210,y:138,r:18}],                                                                         side:"back"},
+  "광배근":     {pts:[{x:160,y:190,r:20},{x:240,y:190,r:20},{x:158,y:215,r:16},{x:242,y:215,r:16}],                                  side:"back"},
+  "이두":       {pts:[{x:138,y:195,r:11},{x:262,y:195,r:11}],                                                                         side:"back"},
+  "허리":       {pts:[{x:188,y:252,r:17},{x:212,y:252,r:17},{x:200,y:270,r:14}],                                                      side:"back"},
+  "둔근":       {pts:[{x:178,y:312,r:22},{x:222,y:312,r:22},{x:178,y:332,r:18},{x:222,y:332,r:18}],                                  side:"back"},
+  "햄스트링":   {pts:[{x:175,y:375,r:18},{x:225,y:375,r:18},{x:175,y:400,r:15},{x:225,y:400,r:15}],                                  side:"back"},
+  "코어":       {pts:[{x:200,y:240,r:20}],                                                                                             side:"front"},
+  "전신":       {pts:[{x:200,y:250,r:55}],                                                                                             side:"both"},
+};
+
+// ─────────────────────────────────────────────────────
+// 헬퍼
+// ─────────────────────────────────────────────────────
+function getMovementForLevel(cat,lk){const c=MOVEMENTS[cat];const idx=Math.min(LEVEL_INDEX[lk],c.levels.length-1);return{name:c.levels[idx],weight_M:c.weights.M[idx],weight_F:c.weights.F[idx],muscles:c.muscles,category:cat};}
+function buildWOD(movements,wodType,level,time,rationale,rounds,extra){return{movements,muscles:[...new Set(movements.flatMap(m=>m.muscles))],wodType,level,time,rationale,rounds,extra};}
+function encodeWOD(wod){const p={t:wod.wodType,l:wod.level,m:wod.time,mv:wod.movements.map(m=>({n:m.name,r:m.reps,wm:m.weight_M??m.wM,wf:m.weight_F??m.wF,ms:m.muscles,c:m.category})),ra:wod.rationale,ro:wod.rounds,ex:wod.extra};return btoa(encodeURIComponent(JSON.stringify(p)));}
+function decodeWOD(str){try{const p=JSON.parse(decodeURIComponent(atob(str)));const movements=p.mv.map(({c,n,r,wm,wf,ms})=>c&&MOVEMENTS[c]?{...getMovementForLevel(c,p.l),reps:r}:{name:n,reps:r,weight_M:wm,weight_F:wf,muscles:ms||[]});return buildWOD(movements,p.t,p.l,p.m,p.ra,p.ro,p.ex);}catch{return null;}}
+
+// ─────────────────────────────────────────────────────
+// AI 생성
+// ─────────────────────────────────────────────────────
+async function generateWithAI(wodType,level,time,targetRegions,rounds){
+  const avail=Object.entries(MOVEMENTS).map(([cat,info])=>{const idx=Math.min(LEVEL_INDEX[level],info.levels.length-1);return`"${cat}":${info.levels[idx]}|근육:${info.muscles.join(",")}|M:${info.weights.M[idx]||"없음"}/F:${info.weights.F[idx]||"없음"}`;}).join("\n");
+  const ref=NAMED_WODS.slice(0,15).map(w=>`${w.name}(${w.type}${w.rounds?"/"+w.rounds:""}): ${w.movements.map(m=>`${m.reps!=null?m.reps+"×":""}${m.name}`).join("+")} `).join("\n");
+  const regionStr=targetRegions.includes("전신")?"전신 균형":`${targetRegions.join("+")} 집중`;
+  const isDB=wodType==="Death by",isFL=wodType==="For Load",isTab=wodType==="Tabata",isFT=wodType==="For Time";
+  const mc=isDB?2:isTab?2:isFL?1:wodType==="EMOM"?3:Math.floor(Math.random()*3)+3;
+  const tg=isFL?"동작1개 reps=null 최대중량":isTab?"동작1~2개 reps=null 20s/10s×8":isDB?"[0]=고정(reps설정) [1]=증가(reps=1)":isFT?`${rounds}R 동작${mc}개 라운드당9~21개`:wodType==="AMRAP"?`${time}분 동작3개 5~10개`:`EMOM ${time}분 동작3개 5~8개`;
+  const prompt=`크로스핏 전문 코치. JSON만 응답(코드블록없이).
+타입:${wodType}|레벨:${level}|부위:${regionStr}|${tg}
+참고 와드:\n${ref}
+동작:\n${avail}
+원칙:같은주동근연속금지|${level==="RXD"?"올림픽리프팅가능":level==="A"?"중간난이도":level==="B"?"기본위주":"바디웨이트만"}
+{"movements":[{"category":"키","reps":숫자또는null}],"rationale":"한국어 2문장"}`;
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:prompt}]})});
+  const data=await res.json();
+  const text=data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
+  const parsed=JSON.parse(text);
+  const movements=parsed.movements.map(({category,reps})=>({...getMovementForLevel(category,level),reps}));
+  const extra=isDB?{deathByFixed:{name:movements[0]?.name,reps:movements[0]?.reps}}:isFL?{forLoad:true}:isTab?{tabata:true}:null;
+  return buildWOD(movements,wodType,level,time,parsed.rationale,rounds,extra);
+}
+
+// ─────────────────────────────────────────────────────
+// 로딩
+// ─────────────────────────────────────────────────────
+function LoadingWOD(){
+  const [d,setD]=useState(0);const [m,setM]=useState(0);
+  const msgs=["근육군 겹침 분석 중...","에너지 시스템 배분 중...","네임드 와드 패턴 참고 중...","최적 조합 설계 중..."];
+  useEffect(()=>{const t1=setInterval(()=>setD(p=>(p+1)%4),400);const t2=setInterval(()=>setM(p=>(p+1)%4),1600);return()=>{clearInterval(t1);clearInterval(t2);};},[]);
+  return(<div style={{marginTop:14,padding:22,background:"#0d1626",border:"1px solid #1a2535",borderRadius:12,textAlign:"center"}}><div style={{fontSize:24,marginBottom:7}}>🤖</div><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#ef4444",marginBottom:3}}>Claude가 WOD를 설계하고 있습니다{".".repeat(d+1)}</div><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#334155"}}>{msgs[m]}</div></div>);
+}
+
+// ─────────────────────────────────────────────────────
+// 신체 SVG
+// ─────────────────────────────────────────────────────
+function BodySVG({activeMuscles,side}){
+  const isA=k=>activeMuscles.includes(k)||(activeMuscles.includes("전신")&&k!=="전신");
+  return(<svg viewBox="0 0 400 560" style={{width:"100%",maxWidth:162}}>
+    <g fill="#162032" stroke="#253347" strokeWidth="1.5">
+      <ellipse cx="200" cy="65" rx="30" ry="36"/><rect x="190" y="97" width="20" height="18" rx="3"/>
+      <path d="M140 115 Q160 110 200 112 Q240 110 260 115 L268 145 Q260 150 240 148 L238 290 L162 290 L160 148 Q140 150 132 145 Z"/>
+      <path d="M140 118 Q118 128 112 180 Q110 220 118 265 Q126 270 136 265 Q138 220 142 175 L148 148 Z"/>
+      <path d="M260 118 Q282 128 288 180 Q290 220 282 265 Q274 270 264 265 Q262 220 258 175 L252 148 Z"/>
+      <path d="M162 288 L238 288 L248 320 L152 320 Z"/>
+      <path d="M154 318 L182 318 L184 420 L178 498 L158 498 L155 420 Z"/>
+      <path d="M246 318 L218 318 L216 420 L222 498 L242 498 L245 420 Z"/>
+      <ellipse cx="168" cy="504" rx="16" ry="9"/><ellipse cx="232" cy="504" rx="16" ry="9"/>
+    </g>
+    {Object.entries(MUSCLE_MAP).map(([key,info])=>{
+      if(info.side!==side&&info.side!=="both")return null;
+      const active=isA(key);
+      return info.pts.map((pt,i)=>(<circle key={`${key}-${i}`} cx={pt.x} cy={pt.y} r={pt.r} fill={active?"rgba(239,68,68,0.80)":"rgba(148,163,184,0.05)"} stroke={active?"rgba(239,68,68,0.35)":"none"} strokeWidth="1" style={{transition:"fill .3s"}}/>));
+    })}
+    <text x="200" y="545" textAnchor="middle" fill="#334155" fontSize="11" fontFamily="monospace">{side==="front"?"앞면":"뒷면"}</text>
+  </svg>);
+}
+
+// ─────────────────────────────────────────────────────
+// 메인
+// ─────────────────────────────────────────────────────
+export default function WODGenerator(){
+  const [mode,setMode]         =useState("ai");
+  const [wodType,setWodType]   =useState("For Time");
+  const [level,setLevel]       =useState("RXD");
+  const [time,setTime]         =useState(15);
+  const [rounds,setRounds]     =useState(5);
+  const [regions,setRegions]   =useState(["전신"]);
+  const [wod,setWod]           =useState(null);
+  const [loading,setLoading]   =useState(false);
+  const [error,setError]       =useState(null);
+  const [copied,setCopied]     =useState(false);
+  const [selCats,setSelCats]   =useState([]);
+  const [manReps,setManReps]   =useState({});
+  const [showRat,setShowRat]   =useState(false);
+  const [namedIdx,setNamedIdx] =useState(null);
+  const [catFilter,setCatFilter]=useState("전체");
+  const [srch,setSrch]         =useState("");
+
+  useEffect(()=>{const h=window.location.hash.replace("#","");if(h){const d=decodeWOD(h);if(d){setWod(d);setWodType(d.wodType);setLevel(d.level);if(d.time)setTime(d.time);}}},[]);
+
+  const toggleRegion=r=>{if(r==="전신"){setRegions(["전신"]);return;}setRegions(prev=>{const w=prev.filter(x=>x!=="전신");const n=w.includes(r)?w.filter(x=>x!==r):[...w,r];return n.length===0?["전신"]:n;});};
+  const toggleCat=c=>setSelCats(p=>p.includes(c)?p.filter(x=>x!==c):[...p,c]);
+
+  const isNamed=wodType==="네임드 와드",isFL=wodType==="For Load",isTab=wodType==="Tabata",isDB=wodType==="Death by",isFT=wodType==="For Time";
+
+  const filteredNamed=NAMED_WODS.filter(w=>(catFilter==="전체"||w.cat===catFilter)&&(srch===""||w.name.toLowerCase().includes(srch.toLowerCase())));
+  const girlsN=NAMED_WODS.filter(w=>w.cat==="Girls").length;
+  const heroN=NAMED_WODS.filter(w=>w.cat==="Hero").length;
+  const openN=NAMED_WODS.filter(w=>w.cat==="Open").length;
+
+  const handleGenerate=useCallback(async()=>{
+    setError(null);setShowRat(false);
+    if(isNamed){
+      if(namedIdx===null){setError("와드를 선택해주세요.");return;}
+      const nw=NAMED_WODS[namedIdx];
+      const mvs=nw.movements.map(m=>({name:m.name,reps:m.reps,weight_M:m.wM,weight_F:m.wF,muscles:m.muscles}));
+      const w=buildWOD(mvs,nw.type,null,nw.time,nw.note,nw.rounds,null);
+      w.namedTitle=nw.name;w.namedDesc=nw.desc;w.tribute=nw.tribute;w.category=nw.cat;
+      setWod(w);return;
+    }
+    if(mode==="ai"){
+      setLoading(true);
+      try{setWod(await generateWithAI(wodType,level,time,regions,rounds));}
+      catch(e){console.error(e);setError("AI 생성 실패. 다시 시도해주세요.");}
+      finally{setLoading(false);}
+    }else{
+      if(!selCats.length)return;
+      const REPS=[5,7,9,10,12,15,21];
+      const cnt=isDB?2:Math.min(selCats.length,isTab?2:isFL?1:wodType==="EMOM"?3:5);
+      const movements=selCats.slice(0,cnt).map(cat=>({...getMovementForLevel(cat,level),reps:(isFL||isTab)?null:(parseInt(manReps[cat])||REPS[Math.floor(Math.random()*REPS.length)])}));
+      const extra=isDB?{deathByFixed:{name:movements[0]?.name,reps:movements[0]?.reps}}:isFL?{forLoad:true}:isTab?{tabata:true}:null;
+      setWod(buildWOD(movements,wodType,level,time,null,rounds,extra));
+    }
+  },[mode,wodType,level,time,regions,rounds,selCats,manReps,namedIdx,isNamed,isDB,isFL,isTab]);
+
+  const handleShare=()=>{if(!wod)return;navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${encodeWOD(wod)}`).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2500);});};
+
+  const cc=w=>CAT_COLOR[w]||CAT_COLOR.Girls;
+
+  return(<div style={{minHeight:"100vh",background:"#070d1a",color:"#e2e8f0",fontFamily:"'Courier New',monospace",padding:"16px 12px"}}>
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&display=swap');
+    *{box-sizing:border-box}
+    .pill{border:1px solid #1a2535;background:transparent;color:#475569;padding:5px 10px;border-radius:999px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;transition:all .2s}
+    .pill:hover{border-color:#ef4444;color:#ef4444}.pill.on{background:#ef4444;border-color:#ef4444;color:#fff}.pill.sel{background:#1a2535;border-color:#334155;color:#cbd5e1}
+    .lvl{border:1px solid;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:'Bebas Neue',monospace;font-size:16px;transition:all .2s;background:transparent}
+    .card{background:#0d1626;border:1px solid #1a2535;border-radius:12px;padding:12px}
+    .gen{width:100%;padding:12px;border:none;border-radius:8px;color:#fff;font-family:'Bebas Neue',monospace;font-size:20px;letter-spacing:.15em;cursor:pointer;transition:all .2s}
+    .gen:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}.gen:disabled{opacity:.3;cursor:not-allowed}
+    .rbadge{color:#fff;font-family:'Bebas Neue';font-size:17px;min-width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .sharebtn{display:flex;align-items:center;gap:4px;padding:5px 10px;background:transparent;border:1px solid #1a2535;border-radius:6px;color:#475569;font-family:'IBM Plex Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s}
+    .sharebtn:hover,.sharebtn.ok{border-color:#22c55e;color:#22c55e}.sharebtn.ok{background:#052e16}
+    .tab{flex:1;padding:8px;border:none;background:transparent;color:#334155;font-family:'IBM Plex Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s;border-bottom:2px solid transparent}
+    .tab.on{color:#ef4444;border-bottom-color:#ef4444}
+    .tag{font-size:9px;background:#0d1626;color:#334155;padding:2px 5px;border-radius:999px;border:1px solid #1a2535}
+    .mrow{padding:8px 0;border-bottom:1px solid #1a2535;display:flex;align-items:center;gap:8px}.mrow:last-child{border-bottom:none}
+    .rinp{width:42px;background:#1a2535;border:1px solid #253347;border-radius:5px;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:3px 4px;text-align:center}
+    .rinp:focus{outline:none;border-color:#ef4444}
+    .rat{background:transparent;border:1px dashed #1a2535;border-radius:6px;color:#334155;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;cursor:pointer;width:100%;text-align:left;transition:all .2s;margin-top:7px}
+    .rat:hover{border-color:#ef4444;color:#475569}
+    .nc{background:#0d1626;border:1px solid #1a2535;border-radius:7px;padding:7px 9px;cursor:pointer;text-align:left;transition:border-color .15s;width:100%}
+    .nc:hover{border-color:#253347}.nc.on{border-color:#a855f7;background:#150d22}
+    .ftab{padding:4px 10px;border:1px solid #1a2535;border-radius:999px;background:transparent;color:#334155;font-family:'IBM Plex Mono',monospace;font-size:9px;cursor:pointer;transition:all .2s}
+    .ftab.on{background:#1a2535;color:#e2e8f0;border-color:#334155}
+    .srch{background:#0d1626;border:1px solid #1a2535;border-radius:6px;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:5px 9px;outline:none;width:100%;max-width:180px}
+    .srch:focus{border-color:#334155}
+    @keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}.fi{animation:fi .3s ease forwards}
+    @keyframes sh{0%{opacity:.5}50%{opacity:1}100%{opacity:.5}}.sh{animation:sh 2s infinite}
+  `}</style>
+
+  <div style={{maxWidth:980,margin:"0 auto"}}>
+    {/* 헤더 */}
+    <div style={{textAlign:"center",marginBottom:14}}>
+      <div style={{fontFamily:"'Bebas Neue'",fontSize:44,letterSpacing:".1em",color:"#ef4444",lineHeight:1}}>WOD GENERATOR</div>
+      <div style={{color:"#253347",fontSize:9,letterSpacing:".2em",marginTop:2}}>
+        Girls <span style={{color:"#34d399"}}>{girlsN}</span> · Hero <span style={{color:"#f87171"}}>{heroN}</span> · Open <span style={{color:"#60a5fa"}}>{openN}</span> · Total <span style={{color:"#e2e8f0"}}>{NAMED_WODS.length}</span>개 내장
+      </div>
+    </div>
+
+    {/* 모드 탭 */}
+    <div style={{display:"flex",borderBottom:"1px solid #1a2535",marginBottom:10}}>
+      <button className={`tab ${mode==="ai"?"on":""}`} onClick={()=>{setMode("ai");if(isNamed)setWodType("For Time");}}>🤖 AI 자동 생성</button>
+      <button className={`tab ${mode==="manual"?"on":""}`} onClick={()=>{setMode("manual");if(isNamed)setWodType("For Time");}}>✏️ 직접 선택</button>
+    </div>
+
+    {mode==="ai"&&!isNamed&&(
+      <div style={{marginBottom:9,padding:"6px 10px",background:"#0d1626",border:"1px solid #1a2535",borderRadius:8,fontSize:9,color:"#253347",fontFamily:"'IBM Plex Mono',monospace"}}>
+        <span className="sh" style={{display:"inline-flex",alignItems:"center",gap:3,background:"#1a0808",border:"1px solid #7f1d1d",borderRadius:999,color:"#ef4444",fontSize:8,padding:"2px 7px",marginRight:6}}>✦ Claude AI</span>
+        근육 겹침 방지 · 에너지 배분 · {NAMED_WODS.length}개 검증된 와드 패턴 반영 (Girls/Hero/Open)
+      </div>
+    )}
+
+    {/* WOD 타입 + 레벨 */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+      <div className="card">
+        <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:6}}>와드 타입</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {WOD_TYPES.map(t=><button key={t} className={`pill ${wodType===t?"on":""}`} style={wodType===t?{background:TYPE_COLOR[t],borderColor:TYPE_COLOR[t]}:{borderColor:t==="네임드 와드"?"#2d1b69":"#1a2535",color:t==="네임드 와드"?"#7c3aed":"#475569"}} onClick={()=>setWodType(t)}>{t}</button>)}
+        </div>
+      </div>
+      <div className="card">
+        <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:6}}>레벨</div>
+        <div style={{display:"flex",gap:5}}>
+          {LEVELS.map(l=><button key={l} className="lvl" onClick={()=>setLevel(l)} style={{color:level===l?"#fff":LVL_COLORS[l],borderColor:LVL_COLORS[l],background:level===l?LVL_COLORS[l]:"transparent",opacity:isNamed?.3:1}} disabled={isNamed}>{l}</button>)}
+        </div>
+      </div>
+    </div>
+
+    {/* 네임드 와드 */}
+    {isNamed&&(
+      <div className="card" style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          <div style={{fontSize:8,color:"#253347",letterSpacing:".2em"}}>와드 선택 ({filteredNamed.length}개 표시)</div>
+          <div style={{display:"flex",gap:4,marginLeft:"auto",flexWrap:"wrap"}}>
+            {["전체","Girls","Hero","Open"].map(f=>(
+              <button key={f} className={`ftab ${catFilter===f?"on":""}`}
+                style={f!=="전체"&&catFilter===f?{background:cc(f).bg,color:cc(f).text,borderColor:cc(f).border}:{}}
+                onClick={()=>{setCatFilter(f);setNamedIdx(null);}}>
+                {f}{f!=="전체"?` (${NAMED_WODS.filter(w=>w.cat===f).length})`:` (${NAMED_WODS.length})`}
+              </button>
+            ))}
+          </div>
+          <input className="srch" placeholder="와드 검색..." value={srch} onChange={e=>setSrch(e.target.value)}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:4,maxHeight:320,overflowY:"auto"}}>
+          {filteredNamed.map(nw=>{
+            const realIdx=NAMED_WODS.indexOf(nw);
+            return(<button key={nw.name} className={`nc ${namedIdx===realIdx?"on":""}`} onClick={()=>setNamedIdx(realIdx)}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontFamily:"'Bebas Neue'",fontSize:14,color:namedIdx===realIdx?"#a855f7":"#475569",letterSpacing:".04em"}}>{nw.name}</span>
+                <span style={{fontSize:8,borderRadius:3,padding:"1px 4px",border:"1px solid",background:cc(nw.cat).bg,color:cc(nw.cat).text,borderColor:cc(nw.cat).border}}>{nw.cat}</span>
+              </div>
+              <div style={{fontSize:8,color:"#253347",marginTop:1}}>{nw.type}{nw.rounds?` · ${typeof nw.rounds==="string"?nw.rounds:nw.rounds+"R"}`:""}{nw.time?` · ${nw.time}분`:""}</div>
+            </button>);
+          })}
+        </div>
+      </div>
+    )}
+
+    {/* AI 옵션 */}
+    {mode==="ai"&&!isNamed&&(
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <div className="card">
+          <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:6}}>시간 (분)</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",opacity:(isTab||isFL)?.25:1}}>
+            {TIME_OPTIONS.map(t=><button key={t} className={`pill ${time===t?"on":""}`} onClick={()=>setTime(t)} disabled={isTab||isFL}>{t}</button>)}
+          </div>
+          {isFT&&(<div style={{marginTop:7,borderTop:"1px solid #1a2535",paddingTop:6}}>
+            <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:5}}>라운드 수</div>
+            <div style={{display:"flex",gap:4}}>{ROUNDS_OPT.map(r=><button key={r} className={`pill ${rounds===r?"on":""}`} onClick={()=>setRounds(r)}>{r}R</button>)}</div>
+          </div>)}
+        </div>
+        <div className="card">
+          <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:6}}>목표 부위</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {BODY_REGIONS.map(r=><button key={r} className={`pill ${regions.includes(r)?"on":""}`} onClick={()=>toggleRegion(r)}>{r}</button>)}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 직접 선택 */}
+    {mode==="manual"&&!isNamed&&(
+      <div className="card" style={{marginBottom:8}}>
+        <div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:7}}>동작 선택 {selCats.length>0&&<span style={{color:"#ef4444"}}>({selCats.length}개)</span>}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {Object.entries(MOVEMENTS).map(([cat,info])=>{const on=selCats.includes(cat);return(<button key={cat} className={`pill ${on?"sel":""}`} onClick={()=>toggleCat(cat)} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",borderRadius:7,padding:"5px 9px",borderColor:on?"#334155":"#1a2535",color:on?"#e2e8f0":"#334155"}}><span style={{fontWeight:600,fontSize:10}}>{info.label}</span><span style={{fontSize:8,color:"#253347",marginTop:1}}>{getMovementForLevel(cat,level).name}</span></button>);})}
+        </div>
+        {isFT&&(<div style={{marginTop:7,borderTop:"1px solid #1a2535",paddingTop:6}}><div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:5}}>라운드 수</div><div style={{display:"flex",gap:4}}>{ROUNDS_OPT.map(r=><button key={r} className={`pill ${rounds===r?"on":""}`} onClick={()=>setRounds(r)}>{r}R</button>)}</div></div>)}
+        {selCats.length>0&&!isFL&&!isTab&&!isDB&&(<div style={{marginTop:7,borderTop:"1px solid #1a2535",paddingTop:6}}><div style={{fontSize:8,color:"#253347",letterSpacing:".2em",marginBottom:5}}>랩수 (빈칸=랜덤)</div><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{selCats.map(cat=>(<div key={cat} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:9,color:"#475569"}}>{MOVEMENTS[cat].label}</span><input className="rinp" type="number" min="1" max="50" placeholder="?" value={manReps[cat]||""} onChange={e=>setManReps(p=>({...p,[cat]:e.target.value}))}/></div>))}</div></div>)}
+      </div>
+    )}
+
+    {error&&<div style={{marginBottom:8,padding:"7px 10px",background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:8,color:"#fca5a5",fontFamily:"'IBM Plex Mono',monospace",fontSize:10}}>⚠️ {error}</div>}
+
+    <button className="gen" style={{background:TYPE_COLOR[wodType]||"#ef4444"}} onClick={handleGenerate} disabled={loading||(mode==="manual"&&!isNamed&&!selCats.length)||(isNamed&&namedIdx===null)}>
+      {loading?"⏳ 생성 중...":isNamed?"📋 와드 불러오기":mode==="ai"?"🤖 AI WOD 생성":"✅ WOD 빌드"}
+    </button>
+
+    {loading&&<LoadingWOD/>}
+
+    {/* 결과 */}
+    {wod&&!loading&&(
+      <div className="fi" style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr auto",gap:10}}>
+        <div className="card">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+            <div>
+              {wod.namedTitle
+                ?<><div style={{fontFamily:"'Bebas Neue'",fontSize:21,color:"#a855f7",letterSpacing:".05em"}}>{wod.namedTitle} <span style={{fontSize:9,fontFamily:"'IBM Plex Mono',monospace",color:cc(wod.category).text}}>{wod.category}</span></div><div style={{fontSize:9,color:"#581c87",fontFamily:"'IBM Plex Mono',monospace"}}>{wod.tribute}</div></>
+                :<div style={{fontFamily:"'Bebas Neue'",fontSize:21,color:TYPE_COLOR[wod.wodType],letterSpacing:".1em"}}>{wod.wodType}</div>
+              }
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              {!wod.namedTitle&&<span className="tag" style={{color:LVL_COLORS[wod.level],borderColor:LVL_COLORS[wod.level]}}>{wod.level}</span>}
+              {wod.time&&<span className="tag">{wod.time}분</span>}
+              {wod.rounds&&isFT&&<span className="tag" style={{color:"#60a5fa",borderColor:"#1e3a5f"}}>{typeof wod.rounds==="string"?wod.rounds:`${wod.rounds}R`}</span>}
+              {wod.extra?.tabata&&<span className="tag" style={{color:"#ec4899",borderColor:"#831843"}}>20s/10s×8</span>}
+              {wod.extra?.forLoad&&<span className="tag" style={{color:"#eab308",borderColor:"#713f12"}}>MAX</span>}
+              <button className={`sharebtn ${copied?"ok":""}`} onClick={handleShare}>{copied?"✓ 복사됨!":"🔗 공유"}</button>
+            </div>
+          </div>
+          {isDB&&<div style={{marginBottom:7,padding:"6px 9px",background:"#1a0f00",border:"1px solid #78350f",borderRadius:6,fontSize:9,color:"#fde68a",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.8}}><b style={{color:"#f97316"}}>Death by</b>　🔒 {wod.movements[0]?.name} 매분 {wod.movements[0]?.reps}개　📈 {wod.movements[1]?.name} +1/분</div>}
+          {wod.extra?.tabata&&<div style={{marginBottom:7,padding:"6px 9px",background:"#1a0015",border:"1px solid #701a75",borderRadius:6,fontSize:9,color:"#f0abfc",fontFamily:"'IBM Plex Mono',monospace"}}><b style={{color:"#e879f9"}}>Tabata</b>: 20초 운동 → 10초 휴식 × 8라운드</div>}
+          {wod.extra?.forLoad&&<div style={{marginBottom:7,padding:"6px 9px",background:"#1a1500",border:"1px solid #713f12",borderRadius:6,fontSize:9,color:"#fef08a",fontFamily:"'IBM Plex Mono',monospace"}}><b style={{color:"#eab308"}}>For Load</b>: 최대 중량 도전. 충분한 워밍업 필수.</div>}
+          {wod.namedDesc&&<div style={{marginBottom:9,padding:"7px 9px",background:"#0d0920",border:"1px solid #2d1b69",borderRadius:6,fontSize:9,color:"#c4b5fd",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.9,whiteSpace:"pre-line"}}>{wod.namedDesc}</div>}
+          {wod.movements.map((m,i)=>(
+            <div key={i} className="mrow">
+              {m.reps!=null?<div className="rbadge" style={{background:TYPE_COLOR[wod.wodType]||"#ef4444"}}>{m.reps}</div>
+                :isDB&&i===1?<div className="rbadge" style={{background:"#f97316",fontSize:10}}>+1/분</div>
+                :wod.extra?.tabata?<div className="rbadge" style={{background:"#db2777",fontSize:9,minWidth:40}}>20s</div>
+                :wod.extra?.forLoad?<div className="rbadge" style={{background:"#ca8a04",fontSize:9,minWidth:40}}>MAX</div>
+                :null}
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontFamily:"'IBM Plex Mono'",fontWeight:600,fontSize:11}}>{m.name}</span>
+                  {isDB&&<span style={{fontSize:8,borderRadius:3,padding:"1px 4px",border:"1px solid",background:i===0?"#1e3a5f":"#1a0808",color:i===0?"#60a5fa":"#f87171",borderColor:i===0?"#1e40af":"#7f1d1d"}}>{i===0?"고정":"증가"}</span>}
+                </div>
+                {(m.weight_M??m.wM)!=null&&<div style={{fontSize:9,color:"#334155",marginTop:1}}>♂ {m.weight_M??m.wM} lbs · ♀ {m.weight_F??m.wF} lbs</div>}
+              </div>
+            </div>
+          ))}
+          {wod.rationale&&(<><button className="rat" onClick={()=>setShowRat(p=>!p)}>{showRat?"▾":"▸"} {wod.namedTitle?"와드 소개":"AI 설계 근거"} 보기</button>{showRat&&<div style={{marginTop:5,padding:"8px 9px",background:"#070d1a",border:"1px solid #1a2535",borderLeft:`3px solid ${wod.namedTitle?"#a855f7":TYPE_COLOR[wod.wodType]}`,borderRadius:5,fontSize:9,color:"#475569",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.9}}>{wod.rationale}</div>}</>)}
+          <div style={{marginTop:9,paddingTop:9,borderTop:"1px solid #1a2535"}}>
+            <div style={{fontSize:8,color:"#1a2535",letterSpacing:".2em",marginBottom:4}}>목표 근육</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{wod.muscles.map(m=><span key={m} className="tag" style={{color:"#ef4444",borderColor:"#7f1d1d",background:"#1a0808"}}>{m}</span>)}</div>
+          </div>
+        </div>
+        <div className="card" style={{padding:9,display:"flex",flexDirection:"column",alignItems:"center",minWidth:168}}>
+          <div style={{fontSize:8,color:"#1a2535",letterSpacing:".2em",marginBottom:3}}>근육 지도</div>
+          <div style={{display:"flex",gap:3}}><BodySVG activeMuscles={wod.muscles} side="front"/><BodySVG activeMuscles={wod.muscles} side="back"/></div>
+          <div style={{marginTop:5,display:"flex",alignItems:"center",gap:4,fontSize:8,fontFamily:"'IBM Plex Mono',monospace",color:"#253347"}}><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"rgba(239,68,68,0.80)"}}/>활성 근육</div>
+        </div>
+      </div>
+    )}
+    <div style={{textAlign:"center",marginTop:14,fontSize:8,color:"#0d1626",letterSpacing:".2em"}}>RXD 시도 전 반드시 전문 트레이너와 상담하세요</div>
+  </div>
+  </div>);
+}
